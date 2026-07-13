@@ -1,6 +1,23 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-14 (session 1, checkpoint 2)
+Updated: 2026-07-14 (session 2, checkpoint 3)
+
+## Session-2: graphics overhaul (verified in browser)
+- render.js rewritten as a neon-noir 2.5D renderer: per-mission baked
+  environment (asphalt/sidewalk/interior materials, curbs, lane markings,
+  manholes, cracks, grime, neon-reflecting puddles), pseudo-3D walls (front
+  faces, bevels, AO shadows, window slits), baked neon signage with flicker +
+  streetlamp pools, dynamic lighting layer (ambient dark + light-pool cutouts
+  for players/signs/pickups/boss/muzzle flashes) + additive neon washes,
+  articulated vector humanoids (walk-cycle legs, shoulders, heads: visor/hood/
+  cap/chrome, held weapons, rim light, distinct silhouettes per type, lying
+  DOWN pose, hands-up pose, pill status tags), additive bullet tracers,
+  particle-based hit/debris/break effects, player-hurt vignette.
+- Camera: ZOOM = 1.45 with map-bounds clamping; mouse aim maps through the
+  zoom (verified: 6/7 hits on a stationary target).
+- Gameplay fix found while testing: players now auto-reload when firing on an
+  empty mag.
+- All visuals verified live by screenshot; 44 unit tests still green.
 
 ## Session-1 verification results (browser, no god mode unless noted)
 - Full M01 arc E2E (god-mode harness): 13 arrests / 0 kills, escalation fired,

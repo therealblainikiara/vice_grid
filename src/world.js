@@ -15,6 +15,7 @@ import {
 import { AGENTS, ENEMY_TYPES } from './missions.js';
 
 export const TILE = 48;
+export const ZOOM = 1.45; // camera zoom: world px -> screen px
 const R = 14; // body radius
 
 let nextId = 1;
@@ -287,6 +288,13 @@ export function updateWorld(w, dt, controlsBySlot) {
     w.cam.x += (cx - w.cam.x) * sm;
     w.cam.y += (cy - w.cam.y) * sm;
   }
+  // clamp the view inside the map (centre if the map is smaller than the view)
+  {
+    const hw = (w.viewW ?? 1280) / 2 / ZOOM, hh = (w.viewH ?? 720) / 2 / ZOOM;
+    const mw = w.cols * TILE, mh = w.rows * TILE;
+    w.cam.x = mw <= hw * 2 ? mw / 2 : clamp(w.cam.x, hw, mw - hw);
+    w.cam.y = mh <= hh * 2 ? mh / 2 : clamp(w.cam.y, hh, mh - hh);
+  }
   w.cam.shake = Math.max(0, w.cam.shake - dt * 3);
 
   // Win / lose
@@ -342,10 +350,10 @@ function updatePlayer(w, p, dt, c) {
     }
   }
 
-  // Aim
+  // Aim (screen -> world through the camera zoom)
   if (c.usesMouseAim) {
-    const wx = c.aimScreenX + w.cam.x - w.viewW / 2;
-    const wy = c.aimScreenY + w.cam.y - w.viewH / 2;
+    const wx = w.cam.x + (c.aimScreenX - w.viewW / 2) / ZOOM;
+    const wy = w.cam.y + (c.aimScreenY - w.viewH / 2) / ZOOM;
     p.aimAngle = angleTo(p.x, p.y, wx, wy);
   } else if (Math.hypot(c.aimDirX ?? 0, c.aimDirY ?? 0) > 0.01) {
     p.aimAngle = Math.atan2(c.aimDirY, c.aimDirX);
@@ -361,8 +369,9 @@ function updatePlayer(w, p, dt, c) {
   const ws = p.weapons[p.weaponIdx];
   const def = WEAPONS[ws.key];
 
-  // Reload
+  // Reload — manual, plus auto-reload when firing on an empty mag
   if (c.reload && justPressed(p, c, 'reload') && startReload(ws)) w.fx.reloadSfx?.();
+  if (c.fire && ws.ammo === 0 && ws.reloading <= 0 && startReload(ws)) w.fx.reloadSfx?.();
 
   // Fire
   if (c.fire && !def.melee && canFire(ws)) {

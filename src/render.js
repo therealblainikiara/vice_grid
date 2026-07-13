@@ -1,240 +1,813 @@
-// render.js — neon vector canvas renderer. Reads world state; never mutates it.
+// render.js — neon-noir 2.5D canvas renderer.
+// Static environment (floors, walls, signage, grime) is baked once per mission
+// to an offscreen canvas; entities, effects and the lighting layer are drawn
+// per frame. Public API is unchanged: draw(ctx, world, settings).
 
-import { TILE } from './world.js';
+import { TILE, ZOOM } from './world.js';
+import { WEAPONS } from './combat.js';
+
+// deterministic per-tile hash for decor variation
+function hash(x, y, s = 0) {
+  let h = (x * 374761393 + y * 668265263 + s * 2246822519) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+const NEON = ['#31d3ff', '#ff4fd8', '#ffd94f', '#58d0ba', '#9dff57', '#ff8a3d'];
+const SIGNS = [
+  ['HALCYON', '#31d3ff'], ['GLOW⁰', '#9dff57'], ['NOODLE-24', '#ff8a3d'],
+  ['CREDIT NOW', '#ffd94f'], ['BAIL BONDS', '#ff4fd8'], ['QUICKCELL', '#58d0ba'],
+  ['PAWN + AMMO', '#ffd94f'], ['LIVE ODDS', '#ff4fd8'],
+];
+const CIV_OUTFITS = ['#8d95a8', '#a89b8d', '#7d96a0', '#a08d99', '#96a08d', '#9a8da8'];
+const SKINS = ['#e8c39e', '#c68e5f', '#8d5524', '#f1d5b8', '#a56a3f'];
+
+const cache = { key: null, base: null, lights: [], light: null };
 
 export function draw(ctx, w, settings) {
   const W = ctx.canvas.width, H = ctx.canvas.height;
   w.viewW = W; w.viewH = H;
   const fx = settings.fxIntensity ?? 1;
+  const now = performance.now();
   const shakeAmt = (settings.reducedFlash ? 0 : w.cam.shake) * 6 * (settings.screenShake ?? 1);
-  const ox = W / 2 - w.cam.x + (Math.random() - 0.5) * shakeAmt;
-  const oy = H / 2 - w.cam.y + (Math.random() - 0.5) * shakeAmt;
+  const shx = (Math.random() - 0.5) * shakeAmt;
+  const shy = (Math.random() - 0.5) * shakeAmt;
+  // world -> screen for the lighting pass
+  const sx = (x) => (x - w.cam.x) * ZOOM + W / 2 + shx;
+  const sy = (y) => (y - w.cam.y) * ZOOM + H / 2 + shy;
 
-  ctx.fillStyle = '#0a0d12';
+  if (cache.key !== w.mission.id) bakeStatic(w);
+
+  ctx.fillStyle = '#05070c';
   ctx.fillRect(0, 0, W, H);
   ctx.save();
-  ctx.translate(ox, oy);
+  ctx.translate(W / 2 + shx, H / 2 + shy);
+  ctx.scale(ZOOM, ZOOM);
+  ctx.translate(-w.cam.x, -w.cam.y);
 
-  // tiles
-  const x0 = Math.max(0, Math.floor((w.cam.x - W / 2) / TILE) - 1);
-  const x1 = Math.min(w.cols - 1, Math.ceil((w.cam.x + W / 2) / TILE) + 1);
-  const y0 = Math.max(0, Math.floor((w.cam.y - H / 2) / TILE) - 1);
-  const y1 = Math.min(w.rows - 1, Math.ceil((w.cam.y + H / 2) / TILE) + 1);
-  for (let ty = y0; ty <= y1; ty++) {
-    for (let tx = x0; tx <= x1; tx++) {
-      const k = tx + ',' + ty, px = tx * TILE, py = ty * TILE;
-      if (w.walls.has(k)) {
-        ctx.fillStyle = '#1a2333';
-        ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = '#2b3949';
-        ctx.fillRect(px, py, TILE, 6);
-      } else if (w.roads.has(k)) {
-        ctx.fillStyle = '#11151c';
-        ctx.fillRect(px, py, TILE, TILE);
-        if (ty % 2 === 0 && tx % 2 === 0) { ctx.fillStyle = '#e2b45b33'; ctx.fillRect(px + TILE / 2 - 12, py + TILE / 2 - 2, 24, 4); }
-      } else {
-        ctx.fillStyle = (tx + ty) % 2 ? '#12161e' : '#131820';
-        ctx.fillRect(px, py, TILE, TILE);
-      }
+  // 1) baked environment
+  ctx.drawImage(cache.base, 0, 0);
+
+  // 2) sign flicker (cheap dynamic sparkle over baked glow)
+  for (const s of cache.lights) {
+    if (s.kind !== 'sign') continue;
+    const fl = hash(s.x | 0, s.y | 0, (now / 120) | 0);
+    if (fl < 0.06 && !settings.reducedFlash) { // brief dropout
+      ctx.fillStyle = 'rgba(5,7,12,0.75)';
+      ctx.fillRect(s.x - s.w / 2 - 2, s.y - 8, s.w + 4, 16);
     }
   }
 
-  // pickups
-  for (const pk of w.pickups) {
-    const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 300 + pk.id);
-    ctx.save();
-    ctx.translate(pk.x, pk.y);
-    if (pk.kind === 'evidence') {
-      glow(ctx, '#ffd94f', 16 * fx * pulse);
-      ctx.fillStyle = '#ffd94f';
-      ctx.fillRect(-9, -12, 18, 24);
-      ctx.fillStyle = '#0a0d12';
-      ctx.fillRect(-6, -8, 12, 3); ctx.fillRect(-6, -2, 12, 3); ctx.fillRect(-6, 4, 12, 3);
-    } else if (pk.kind === 'medkit') {
-      glow(ctx, '#6dff9e', 14 * fx * pulse);
-      ctx.fillStyle = '#6dff9e';
-      ctx.fillRect(-10, -10, 20, 20);
-      ctx.fillStyle = '#0a0d12';
-      ctx.fillRect(-2, -7, 4, 14); ctx.fillRect(-7, -2, 14, 4);
-    } else {
-      glow(ctx, '#7db4ff', 14 * fx * pulse);
-      ctx.fillStyle = '#7db4ff';
-      ctx.fillRect(-14, -5, 28, 10);
-      ctx.fillRect(2, -9, 6, 8);
-    }
-    ctx.restore();
-  }
+  // 3) pickups
+  for (const pk of w.pickups) drawPickup(ctx, pk, now, fx);
 
-  // props
-  for (const pr of w.props) {
-    ctx.save();
-    ctx.translate(pr.x, pr.y);
-    const dmg = pr.hp / (pr.kind === 'shelf' ? 90 : 60);
-    ctx.fillStyle = pr.kind === 'shelf' ? '#3a4a5c' : '#5c4a32';
-    ctx.strokeStyle = '#00000066';
-    ctx.fillRect(-pr.r, -pr.r, pr.r * 2, pr.r * 2);
-    ctx.strokeRect(-pr.r, -pr.r, pr.r * 2, pr.r * 2);
-    if (dmg < 0.7) { ctx.strokeStyle = '#000000aa'; line(ctx, -pr.r * 0.6, -pr.r * 0.4, pr.r * 0.3, pr.r * 0.5); }
-    if (dmg < 0.4) { line(ctx, pr.r * 0.5, -pr.r * 0.6, -pr.r * 0.2, pr.r * 0.6); }
-    ctx.restore();
-  }
+  // 4) props (crates / shelves with damage states)
+  for (const pr of w.props) drawProp(ctx, pr);
 
-  // civilians
-  for (const c of w.civilians) drawBody(ctx, c, '#e8e2d4', settings, fx);
+  // 5) entities, painter-sorted by y for correct overlap
+  const bodies = [...w.civilians, ...w.enemies, ...w.players].sort((a, b) => a.y - b.y);
+  for (const e of bodies) drawHumanoid(ctx, w, e, settings, fx, now);
 
-  // enemies
-  for (const e of w.enemies) {
-    const col = settings.highContrastEnemies ? '#ff5050' : e.color;
-    drawBody(ctx, e, col, settings, fx);
-  }
-
-  // players
-  for (const p of w.players) drawBody(ctx, p, p.agent.color, settings, fx);
-
-  // bullets
+  // 6) bullets — additive tracers
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
   for (const b of w.bullets) {
-    ctx.save();
-    glow(ctx, b.lethal ? '#ffca6b' : '#63e4ff', 8 * fx);
-    ctx.strokeStyle = b.lethal ? '#ffca6b' : '#63e4ff';
-    ctx.lineWidth = 2.5;
-    line(ctx, b.x - b.vx * 0.015, b.y - b.vy * 0.015, b.x, b.y);
-    ctx.restore();
+    const col = b.lethal ? '#ffca6b' : '#63e4ff';
+    const grad = ctx.createLinearGradient(b.x - b.vx * 0.03, b.y - b.vy * 0.03, b.x, b.y);
+    grad.addColorStop(0, 'transparent');
+    grad.addColorStop(1, col);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    line(ctx, b.x - b.vx * 0.03, b.y - b.vy * 0.03, b.x, b.y);
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = '#ffffff';
+    line(ctx, b.x - b.vx * 0.008, b.y - b.vy * 0.008, b.x, b.y);
   }
+  ctx.restore();
 
-  // effects
-  for (const f of w.effects) {
-    const t = f.t / f.dur;
-    ctx.save();
-    ctx.translate(f.x, f.y);
-    ctx.globalAlpha = (1 - t) * fx;
-    if (f.kind === 'muzzle' && !settings.reducedFlash) {
-      ctx.rotate(f.a);
-      glow(ctx, '#fff2ba', 20);
-      ctx.fillStyle = '#fff2ba';
-      ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(22, 0); ctx.lineTo(0, 5); ctx.fill();
-    } else if (f.kind === 'hit') {
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(0, 0, 6 + t * 14, 0, Math.PI * 2); ctx.stroke();
-    } else if (f.kind === 'spark' || f.kind === 'debris') {
-      ctx.fillStyle = f.kind === 'spark' ? '#ffd94f' : '#8a7a5a';
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2 + f.x;
-        ctx.fillRect(Math.cos(a) * t * 18 - 2, Math.sin(a) * t * 18 - 2, 4, 4);
-      }
-    } else if (f.kind === 'break') {
-      ctx.fillStyle = '#8a7a5a';
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        ctx.fillRect(Math.cos(a) * t * 30 - 3, Math.sin(a) * t * 30 - 3, 6, 6);
-      }
-    } else if (f.kind === 'swing') {
-      ctx.rotate(f.a);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(0, 0, 34, -0.9 + t * 0.6, 0.9 + t * 0.6); ctx.stroke();
-    }
-    ctx.restore();
-  }
+  // 7) effects
+  for (const f of w.effects) drawEffect(ctx, f, settings, fx);
 
   ctx.restore();
 
-  // vignette
-  const vg = ctx.createRadialGradient(W / 2, H / 2, H / 3, W / 2, H / 2, H);
-  vg.addColorStop(0, 'transparent'); vg.addColorStop(1, '#000000aa');
+  // 8) lighting: ambient darkness with light pools cut out
+  drawLighting(ctx, w, settings, fx, sx, sy, W, H, now);
+
+  // 9) additive neon washes
+  if (!settings.reducedFlash) {
+    ctx.save();
+    ctx.translate(W / 2 + shx, H / 2 + shy);
+    ctx.scale(ZOOM, ZOOM);
+    ctx.translate(-w.cam.x, -w.cam.y);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of cache.lights) {
+      const pulse = 0.75 + 0.25 * Math.sin(now / 700 + s.x);
+      radial(ctx, s.x, s.y, s.r * 1.4, hexA(s.color, 0.05 * fx * pulse));
+    }
+    for (const f of w.effects) {
+      if (f.kind === 'muzzle') radial(ctx, f.x, f.y, 130, hexA('#ffd98a', 0.22 * fx * (1 - f.t / f.dur)));
+    }
+    ctx.restore();
+  }
+
+  // 10) player-hurt vignette
+  const hurt = Math.max(...w.players.map((p) => p.hitFlash ?? 0), 0);
+  if (hurt > 0 && !settings.reducedFlash) {
+    const vg = ctx.createRadialGradient(W / 2, H / 2, H / 2.6, W / 2, H / 2, H / 1.1);
+    vg.addColorStop(0, 'transparent');
+    vg.addColorStop(1, `rgba(255,40,40,${(hurt / 0.12) * 0.35})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // 11) frame vignette
+  const vg = ctx.createRadialGradient(W / 2, H / 2, H / 2.1, W / 2, H / 2, H * 1.05);
+  vg.addColorStop(0, 'transparent');
+  vg.addColorStop(1, 'rgba(2,3,8,0.55)');
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
 }
 
-function glow(ctx, color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur; }
-function line(ctx, x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+// ---------------------------------------------------------------- lighting
 
-function drawBody(ctx, e, color, settings, fx) {
+function drawLighting(ctx, w, settings, fx, sx, sy, W, H, now) {
+  if (!cache.light || cache.light.width !== W) {
+    cache.light = document.createElement('canvas');
+    cache.light.width = W; cache.light.height = H;
+  }
+  const lc = cache.light.getContext('2d');
+  lc.globalCompositeOperation = 'source-over';
+  lc.fillStyle = 'rgba(4,6,18,0.26)';
+  lc.fillRect(0, 0, W, H);
+  lc.globalCompositeOperation = 'destination-out';
+
+  const cut = (x, y, r, a = 1) => {
+    const cx = sx(x), cy = sy(y), cr = r * ZOOM;
+    const g = lc.createRadialGradient(cx, cy, cr * 0.15, cx, cy, cr);
+    g.addColorStop(0, `rgba(0,0,0,${a})`);
+    g.addColorStop(1, 'transparent');
+    lc.fillStyle = g;
+    lc.fillRect(cx - cr, cy - cr, cr * 2, cr * 2);
+  };
+
+  for (const p of w.players) cut(p.x, p.y, 260, 0.95);
+  for (const s of cache.lights) cut(s.x, s.y, s.r, 0.85);
+  for (const pk of w.pickups) cut(pk.x, pk.y, 80, 0.75);
+  for (const e of w.enemies) {
+    if (e.boss && e.hp > 0) cut(e.x, e.y, 160, 0.65 + 0.2 * Math.sin(now / 300));
+    else if (e.state === 'FIGHT') cut(e.x, e.y, 110, 0.55);
+  }
+  if (!settings.reducedFlash) {
+    for (const f of w.effects) if (f.kind === 'muzzle') cut(f.x, f.y, 240, 1);
+  }
+  ctx.drawImage(cache.light, 0, 0);
+}
+
+// ---------------------------------------------------------------- baking
+
+function bakeStatic(w) {
+  const bw = w.cols * TILE, bh = w.rows * TILE;
+  const c = document.createElement('canvas');
+  c.width = bw; c.height = bh;
+  const g = c.getContext('2d');
+  cache.key = w.mission.id;
+  cache.base = c;
+  cache.lights = [];
+
+  const wall = (x, y) => w.walls.has(x + ',' + y);
+  const road = (x, y) => w.roads.has(x + ',' + y);
+
+  for (let ty = 0; ty < w.rows; ty++) {
+    for (let tx = 0; tx < w.cols; tx++) {
+      const px = tx * TILE, py = ty * TILE;
+      const h0 = hash(tx, ty);
+      if (wall(tx, ty)) continue; // walls after floors
+
+      if (road(tx, ty)) {
+        // asphalt
+        g.fillStyle = h0 > 0.5 ? '#171b26' : '#161a24';
+        g.fillRect(px, py, TILE, TILE);
+        for (let i = 0; i < 5; i++) {
+          g.fillStyle = `rgba(255,255,255,${0.015 + hash(tx, ty, i) * 0.02})`;
+          g.fillRect(px + hash(tx, ty, i + 9) * TILE, py + hash(tx, ty, i + 17) * TILE, 2, 2);
+        }
+        if (!road(tx, ty - 1) && road(tx, ty + 1)) {
+          g.fillStyle = '#232a3a';
+          g.fillRect(px, py, TILE, 3);
+        }
+        if (road(tx, ty - 1) && !road(tx, ty + 1)) {
+          g.fillStyle = '#232a3a';
+          g.fillRect(px, py + TILE - 3, TILE, 3);
+        }
+        if (road(tx, ty - 1) && road(tx, ty + 1) && tx % 2 === 0) {
+          g.fillStyle = 'rgba(226,180,91,0.5)';
+          g.fillRect(px + 8, py + TILE / 2 - 2, 26, 4);
+        }
+        if (h0 > 0.93) { // manhole
+          g.fillStyle = '#151a26';
+          g.beginPath(); g.arc(px + TILE / 2, py + TILE / 2, 9, 0, Math.PI * 2); g.fill();
+          g.strokeStyle = '#0a0d14';
+          g.stroke();
+        }
+      } else if (rowChar(w, tx, ty) === ',') {
+        // sidewalk slabs
+        g.fillStyle = h0 > 0.5 ? '#232837' : '#212633';
+        g.fillRect(px, py, TILE, TILE);
+        g.strokeStyle = 'rgba(0,0,0,0.5)';
+        g.lineWidth = 1;
+        g.strokeRect(px + 0.5, py + 0.5, TILE, TILE);
+        if (h0 > 0.8) { // crack
+          g.strokeStyle = 'rgba(0,0,0,0.55)';
+          g.beginPath();
+          g.moveTo(px + h0 * 20, py + 4);
+          g.lineTo(px + 14 + h0 * 10, py + 22);
+          g.lineTo(px + 8 + h0 * 20, py + TILE - 4);
+          g.stroke();
+        }
+      } else {
+        // interior floor: dark tiles with grout
+        const warm = hash(tx, ty, 3) > 0.5;
+        g.fillStyle = warm ? '#1e1a28' : '#1c1926';
+        g.fillRect(px, py, TILE, TILE);
+        g.strokeStyle = 'rgba(0,0,0,0.6)';
+        g.lineWidth = 1;
+        g.strokeRect(px + 0.5, py + 0.5, TILE / 2, TILE / 2);
+        g.strokeRect(px + TILE / 2 + 0.5, py + TILE / 2 + 0.5, TILE / 2, TILE / 2);
+        g.strokeStyle = 'rgba(255,255,255,0.02)';
+        g.strokeRect(px + 1.5, py + 1.5, TILE - 2, TILE - 2);
+      }
+
+      // grime + puddles on any walkable tile
+      if (h0 > 0.86) {
+        g.fillStyle = 'rgba(0,0,0,0.13)';
+        g.beginPath();
+        g.ellipse(px + TILE * hash(tx, ty, 5), py + TILE * hash(tx, ty, 6), 14, 8, h0 * 3, 0, Math.PI * 2);
+        g.fill();
+      }
+      if (hash(tx, ty, 8) > 0.92) {
+        const puddleX = px + TILE / 2, puddleY = py + TILE / 2;
+        const neon = NEON[(hash(tx, ty, 9) * NEON.length) | 0];
+        g.fillStyle = 'rgba(10,14,26,0.85)';
+        g.beginPath();
+        g.ellipse(puddleX, puddleY, 15, 8, 0, 0, Math.PI * 2);
+        g.fill();
+        const rg = g.createLinearGradient(puddleX, puddleY - 8, puddleX, puddleY + 8);
+        rg.addColorStop(0, hexA(neon, 0.16));
+        rg.addColorStop(1, 'transparent');
+        g.fillStyle = rg;
+        g.beginPath();
+        g.ellipse(puddleX, puddleY, 13, 6.5, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
+
+  // walls: pseudo-3D with front faces, bevels, AO and neon signage
+  for (let ty = 0; ty < w.rows; ty++) {
+    for (let tx = 0; tx < w.cols; tx++) {
+      if (!wall(tx, ty)) continue;
+      const px = tx * TILE, py = ty * TILE;
+      const southOpen = ty + 1 < w.rows && !wall(tx, ty + 1);
+
+      // AO shadow cast down / right onto floor
+      if (southOpen) {
+        const sh = g.createLinearGradient(px, py + TILE, px, py + TILE + 18);
+        sh.addColorStop(0, 'rgba(0,0,0,0.55)');
+        sh.addColorStop(1, 'transparent');
+        g.fillStyle = sh;
+        g.fillRect(px, py + TILE, TILE, 18);
+      }
+      if (tx + 1 < w.cols && !wall(tx + 1, ty)) {
+        const sh = g.createLinearGradient(px + TILE, py, px + TILE + 12, py);
+        sh.addColorStop(0, 'rgba(0,0,0,0.4)');
+        sh.addColorStop(1, 'transparent');
+        g.fillStyle = sh;
+        g.fillRect(px + TILE, py, 12, TILE);
+      }
+
+      if (southOpen) {
+        // top face + front face
+        const frontH = 19;
+        g.fillStyle = '#2f3a52';
+        g.fillRect(px, py, TILE, TILE - frontH);
+        const ff = g.createLinearGradient(px, py + TILE - frontH, px, py + TILE);
+        ff.addColorStop(0, '#232e4a');
+        ff.addColorStop(1, '#141b30');
+        g.fillStyle = ff;
+        g.fillRect(px, py + TILE - frontH, TILE, frontH);
+        g.fillStyle = 'rgba(160,200,255,0.16)';
+        g.fillRect(px, py + TILE - frontH, TILE, 1.5);
+        if (hash(tx, ty, 12) > 0.7) {
+          g.fillStyle = 'rgba(90,140,200,0.13)';
+          g.fillRect(px + 10, py + TILE - frontH + 5, TILE - 20, 4);
+        }
+      } else {
+        g.fillStyle = '#2a3448';
+        g.fillRect(px, py, TILE, TILE);
+      }
+      // top-face bevels
+      g.fillStyle = 'rgba(170,200,255,0.10)';
+      if (!wall(tx, ty - 1)) g.fillRect(px, py, TILE, 2);
+      if (!wall(tx - 1, ty)) g.fillRect(px, py, 2, TILE);
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      if (!wall(tx + 1, ty)) g.fillRect(px + TILE - 2, py, 2, TILE);
+      if (hash(tx, ty, 4) > 0.82) {
+        g.fillStyle = 'rgba(0,0,0,0.2)';
+        g.fillRect(px + 8, py + 8, TILE - 16, TILE - 16);
+      }
+
+      // streetlamp pools on sidewalk-adjacent walls
+      if (southOpen && hash(tx, ty, 30) > 0.8) {
+        const lx = px + TILE / 2, ly = py + TILE + 14;
+        const lg = g.createRadialGradient(lx, ly, 4, lx, ly, 64);
+        lg.addColorStop(0, 'rgba(255,214,150,0.20)');
+        lg.addColorStop(1, 'transparent');
+        g.fillStyle = lg;
+        g.fillRect(lx - 64, ly - 64, 128, 128);
+        cache.lights.push({ kind: 'lamp', x: lx, y: ly, r: 130, color: '#ffc98a', w: 0 });
+      }
+
+      // neon sign on south-facing walls
+      if (southOpen && hash(tx, ty, 21) > 0.62) {
+        const [text, color] = SIGNS[(hash(tx, ty, 22) * SIGNS.length) | 0];
+        const sx = px + TILE / 2, sy = py + TILE - 9;
+        g.save();
+        g.font = 'bold 9px "Segoe UI", sans-serif';
+        g.textAlign = 'center';
+        g.shadowColor = color;
+        g.shadowBlur = 9;
+        g.fillStyle = color;
+        g.fillText(text, sx, sy);
+        g.shadowBlur = 0;
+        g.fillStyle = 'rgba(255,255,255,0.75)';
+        g.fillText(text, sx, sy);
+        const tw = g.measureText(text).width;
+        g.restore();
+        cache.lights.push({ kind: 'sign', x: sx, y: sy, r: 110, color, w: tw });
+      }
+    }
+  }
+
+  // city-glow colour wash over the whole bake: cyan uptown, magenta downtown
+  const wash1 = g.createLinearGradient(0, 0, bw, bh);
+  wash1.addColorStop(0, 'rgba(49,211,255,0.05)');
+  wash1.addColorStop(0.5, 'rgba(0,0,0,0)');
+  wash1.addColorStop(1, 'rgba(255,79,216,0.05)');
+  g.fillStyle = wash1;
+  g.fillRect(0, 0, bw, bh);
+}
+
+function rowChar(w, tx, ty) {
+  return w.mission.map[ty]?.[tx] ?? '.';
+}
+
+// ---------------------------------------------------------------- entities
+
+function styleFor(e, settings) {
+  if (e.kind === 'player') {
+    const rhino = e.agentKey === 'rhino';
+    return {
+      accent: e.agent.color, outfit: rhino ? '#26404f' : '#3d2440',
+      trim: rhino ? '#1a2c38' : '#2a1830', skin: rhino ? SKINS[2] : SKINS[0],
+      size: rhino ? 1.18 : 0.98, head: 'visor', bulky: rhino, glow: 16,
+    };
+  }
+  if (e.kind === 'civ') {
+    const o = CIV_OUTFITS[e.id % CIV_OUTFITS.length];
+    return { accent: 'rgba(255,255,255,0.25)', outfit: o, trim: shade(o, 0.6), skin: SKINS[e.id % SKINS.length], size: 0.92, head: 'bare', glow: 0 };
+  }
+  const hc = settings.highContrastEnemies;
+  const base = {
+    lookout: { outfit: '#33422c', size: 0.92, head: 'hood' },
+    soldier: { outfit: '#324a2e', size: 1.0, head: 'bare' },
+    dealer: { outfit: '#27452f', size: 1.0, head: 'cap' },
+    bruiser: { outfit: '#2c4030', size: 1.22, head: 'bare', bulky: true },
+    chromedog: { outfit: '#3a4a24', size: 1.42, head: 'chrome', bulky: true },
+  }[e.type] ?? { outfit: '#324a2e', size: 1, head: 'bare' };
+  return {
+    ...base,
+    accent: hc ? '#ff5050' : e.color,
+    outfit: hc ? '#5a2323' : base.outfit,
+    trim: hc ? '#3a1515' : shade(base.outfit, 0.55),
+    skin: SKINS[e.id % SKINS.length],
+    glow: e.boss ? 14 : 7,
+  };
+}
+
+function drawHumanoid(ctx, w, e, settings, fx, now) {
+  const st = styleFor(e, settings);
   const dead = e.state === 'DEAD';
   const downed = e.state === 'DOWNED' || e.downed;
   const cuffed = e.state === 'CUFFED';
   const surr = e.state === 'SURRENDER' || e.state === 'FAKE_SURRENDER';
+  const s = st.size;
+  const a = e.aimAngle ?? 0;
+
   ctx.save();
   ctx.translate(e.x, e.y);
 
-  // shadow
-  ctx.fillStyle = '#00000088';
-  ctx.beginPath(); ctx.ellipse(0, 8, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
+  // soft shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  ctx.ellipse(2, 6, 13 * s, 6 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
 
   if (dead) {
-    ctx.globalAlpha = 0.55;
-    ctx.strokeStyle = color; ctx.lineWidth = 3;
-    line(ctx, -10, -10, 10, 10); line(ctx, 10, -10, -10, 10);
+    ctx.rotate(e.id); // varied fall directions
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = shade(st.outfit, 0.5);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 15 * s, 7 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = shade(st.skin, 0.6);
+    ctx.beginPath();
+    ctx.arc(13 * s, 0, 4.5 * s, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
     return;
   }
 
-  if (e.hitFlash > 0 && !settings.reducedFlash) { glow(ctx, '#ffffff', 24); }
-  else glow(ctx, color, (e.kind === 'player' ? 18 : 10) * fx);
+  const hitGlow = e.hitFlash > 0 && !settings.reducedFlash;
 
-  // body
-  ctx.fillStyle = downed || cuffed ? shade(color, 0.5) : color;
-  ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // facing wedge
-  if (!downed && !cuffed && !surr) {
-    const a = e.aimAngle ?? 0;
-    ctx.fillStyle = '#0a0d12';
+  if (downed || cuffed) {
+    // lying pose
+    ctx.save();
+    ctx.rotate(a);
+    ctx.fillStyle = shade(st.outfit, cuffed ? 0.8 : 0.65);
     ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * 15, Math.sin(a) * 15);
-    ctx.lineTo(Math.cos(a + 2.4) * 9, Math.sin(a + 2.4) * 9);
-    ctx.lineTo(Math.cos(a - 2.4) * 9, Math.sin(a - 2.4) * 9);
+    ctx.ellipse(0, 0, 14 * s, 8 * s, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = st.skin;
+    ctx.beginPath();
+    ctx.arc(10 * s, 0, 5 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    if (cuffed) {
+      ctx.strokeStyle = '#ffd94f';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 9 * s, 0, Math.PI * 2); ctx.stroke();
+      tag(ctx, 'CUFFED', 0, -24 * s, '#ffd94f');
+    } else {
+      tag(ctx, e.kind === 'player' ? 'DOWN — REVIVE' : 'DOWN — CUFF', 0, -24 * s, '#ff9c9c');
+    }
+    cuffRing(ctx, e, s);
+    ctx.restore();
+    return;
   }
 
-  // hands-up pose
+  // walking legs (under torso)
+  const phase = (e.x + e.y) * 0.09;
+  const legSwing = Math.sin(phase) * 4;
+  ctx.fillStyle = st.trim;
+  ctx.beginPath(); ctx.ellipse(Math.cos(a + 1.57) * 4 + Math.cos(a) * legSwing * 0.6, Math.sin(a + 1.57) * 4 + Math.sin(a) * legSwing * 0.6, 3.6 * s, 3.6 * s, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(Math.cos(a - 1.57) * 4 - Math.cos(a) * legSwing * 0.6, Math.sin(a - 1.57) * 4 - Math.sin(a) * legSwing * 0.6, 3.6 * s, 3.6 * s, 0, 0, Math.PI * 2); ctx.fill();
+
   if (surr) {
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
-    line(ctx, -8, -8, -14, -20); line(ctx, 8, -8, 14, -20);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('HANDS UP', 0, -28);
-  }
-  if (cuffed) {
-    ctx.strokeStyle = '#ffd94f'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(0, 2, 8, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = '#ffd94f';
-    ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('CUFFED', 0, -24);
-  }
-  if (downed && !cuffed) {
-    ctx.fillStyle = '#ff9c9c';
-    ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(e.kind === 'player' ? 'DOWN — NEEDS REVIVE' : 'DOWN — CUFF', 0, -24);
-  }
-
-  // cuff progress ring
-  if (e.cuffProgress > 0 && e.cuffProgress < 1 && !cuffed) {
-    ctx.strokeStyle = '#ffd94f'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(0, 0, 22, -Math.PI / 2, -Math.PI / 2 + e.cuffProgress * Math.PI * 2); ctx.stroke();
+    // body without weapon, arms raised
+    ctx.save();
+    ctx.rotate(a);
+    ctx.fillStyle = st.outfit;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 8.5 * s, 12 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = st.skin;
+    ctx.lineWidth = 3.4 * s;
+    ctx.lineCap = 'round';
+    line(ctx, -6 * s, -6 * s, -12 * s, -19 * s);
+    line(ctx, 6 * s, -6 * s, 12 * s, -19 * s);
+    drawHead(ctx, st, s, 0, 0);
+    tag(ctx, 'HANDS UP', 0, -27 * s, '#ffffff');
+    cuffRing(ctx, e, s);
+    if (e.boss) tag(ctx, e.name ?? 'BOSS', 0, -37 * s, '#ff5f9e');
+    ctx.restore();
+    return;
   }
 
-  // hp pip for enemies/bosses
-  if (e.kind === 'enemy' && !dead && !cuffed && e.hp < e.maxHp) {
-    ctx.fillStyle = '#00000099';
-    ctx.fillRect(-16, -22, 32, 4);
-    ctx.fillStyle = e.boss ? '#ff5f9e' : '#9dff57';
-    ctx.fillRect(-16, -22, 32 * (e.hp / e.maxHp), 4);
+  // rotated body frame: +x = facing
+  ctx.save();
+  ctx.rotate(a);
+
+  if (hitGlow) { ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 22; }
+  else if (st.glow) { ctx.shadowColor = st.accent; ctx.shadowBlur = st.glow * fx; }
+
+  // torso
+  ctx.fillStyle = st.outfit;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 8.5 * s, 12 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+
+  if (st.bulky) {
+    ctx.fillStyle = shade(st.outfit, 1.35);
+    ctx.beginPath(); ctx.ellipse(-1 * s, -10 * s, 5 * s, 4.4 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-1 * s, 10 * s, 5 * s, 4.4 * s, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // chest accent stripe
+  ctx.fillStyle = st.accent;
+  ctx.beginPath();
+  ctx.ellipse(3.5 * s, 0, 2.6 * s, 7.5 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // weapon + hands
+  const wkey = e.kind === 'player' ? e.weapons?.[e.weaponIdx]?.key : e.ws?.key;
+  const wdef = wkey ? WEAPONS[wkey] : null;
+  if (wdef && !wdef.melee) {
+    const len = wkey === 'shotgun' || wkey === 'rifle' ? 19 : wkey === 'smg' ? 15 : 12;
+    ctx.fillStyle = '#10141c';
+    ctx.fillRect(6 * s, 2.5 * s, len, 3.4);
+    ctx.fillStyle = '#2b3444';
+    ctx.fillRect(6 * s, 2.5 * s, 5, 3.4);
+    ctx.fillStyle = st.skin;
+    ctx.beginPath(); ctx.arc(7 * s, 4.4 * s, 2.6 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6 * s + len * 0.6, 3.6 * s, 2.4 * s, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = st.skin;
+    ctx.beginPath(); ctx.arc(8 * s, 5 * s, 2.8 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(8 * s, -5 * s, 2.8 * s, 0, Math.PI * 2); ctx.fill();
   }
 
-  // boss name
-  if (e.boss) {
-    ctx.fillStyle = '#ff5f9e';
-    ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(e.name ?? 'BOSS', 0, -32);
-  }
+  // head
+  drawHead(ctx, st, s, 1.5 * s, 0);
+
+  ctx.restore(); // unrotate
+
+  // rim light
+  ctx.strokeStyle = hexA(st.accent.startsWith('#') ? st.accent : '#8fb0d8', 0.55);
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(0, 0, 11.5 * s, -Math.PI * 0.85, -Math.PI * 0.15);
+  ctx.stroke();
+
+  cuffRing(ctx, e, s);
+
+  if (e.boss) tag(ctx, e.name ?? 'BOSS', 0, -34 * s, '#ff5f9e');
+  if (e.kind === 'enemy' && !e.boss && e.hp < e.maxHp && e.hp > 0) hpPip(ctx, e, s, '#9dff57');
+  if (e.boss && e.hp < e.maxHp) hpPip(ctx, e, s, '#ff5f9e');
 
   ctx.restore();
 }
 
+function drawHead(ctx, st, s, hx, hy) {
+  ctx.fillStyle = st.head === 'chrome' ? '#c8d4e4' : st.skin;
+  ctx.beginPath();
+  ctx.arc(hx, hy, 5.6 * s, 0, Math.PI * 2);
+  ctx.fill();
+  if (st.head === 'visor') {
+    ctx.fillStyle = st.accent;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 5.6 * s, -0.9, 0.9);
+    ctx.lineTo(hx, hy);
+    ctx.fill();
+    ctx.fillStyle = shade(st.outfit, 1.5);
+    ctx.beginPath();
+    ctx.arc(hx, hy, 5.6 * s, 0.9, Math.PI * 2 - 0.9);
+    ctx.lineTo(hx, hy);
+    ctx.fill();
+  } else if (st.head === 'hood') {
+    ctx.strokeStyle = st.outfit;
+    ctx.lineWidth = 2.6 * s;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 5.4 * s, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (st.head === 'cap') {
+    ctx.fillStyle = shade(st.outfit, 1.4);
+    ctx.beginPath();
+    ctx.arc(hx, hy, 5.6 * s, -2.4, 2.4);
+    ctx.fill();
+  } else if (st.head === 'chrome') {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(hx - 1.5 * s, hy - 1.5 * s, 1.8 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function cuffRing(ctx, e, s) {
+  if (e.cuffProgress > 0 && e.cuffProgress < 1 && e.state !== 'CUFFED') {
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(0, 0, 20 * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#ffd94f';
+    ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.arc(0, 0, 20 * s, -Math.PI / 2, -Math.PI / 2 + e.cuffProgress * Math.PI * 2); ctx.stroke();
+  }
+}
+
+function hpPip(ctx, e, s, color) {
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(-15, -21 * s, 30, 4);
+  ctx.fillStyle = color;
+  ctx.fillRect(-14, -21 * s + 1, 28 * Math.max(0, e.hp / e.maxHp), 2);
+}
+
+function tag(ctx, text, x, y, color) {
+  ctx.font = 'bold 9px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  const w2 = ctx.measureText(text).width / 2 + 5;
+  ctx.fillStyle = 'rgba(4,6,12,0.78)';
+  ctx.beginPath();
+  ctx.roundRect(x - w2, y - 8, w2 * 2, 12, 6);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y + 1);
+}
+
+// ---------------------------------------------------------------- props & pickups
+
+function drawProp(ctx, pr) {
+  ctx.save();
+  ctx.translate(pr.x, pr.y);
+  const maxHp = pr.kind === 'shelf' ? 90 : 60;
+  const dmg = pr.hp / maxHp;
+  const r = pr.r;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(3, r * 0.5 + 3, r, r * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (pr.kind === 'shelf') {
+    ctx.fillStyle = '#2e3c50';
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+    ctx.fillStyle = '#22303f';
+    ctx.fillRect(-r + 3, -r + 3, r * 2 - 6, r * 2 - 6);
+    for (let i = 0; i < 6; i++) {
+      ctx.fillStyle = ['#7a4f4f', '#4f6a7a', '#6a7a4f', '#7a6a4f'][i % 4];
+      if (dmg > i / 6) ctx.fillRect(-r + 5 + (i % 3) * (r * 0.6), -r + 6 + ((i / 3) | 0) * (r * 0.85), r * 0.5, r * 0.6);
+    }
+    ctx.strokeStyle = 'rgba(140,180,240,0.18)';
+    ctx.strokeRect(-r, -r, r * 2, r * 2);
+  } else {
+    ctx.fillStyle = '#54432c';
+    ctx.fillRect(-r, -r, r * 2, r * 2);
+    ctx.fillStyle = '#63513a';
+    ctx.fillRect(-r + 2, -r + 2, r * 2 - 4, r * 2 - 4);
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 2;
+    line(ctx, -r, -r, r, r);
+    line(ctx, r, -r, -r, r);
+    ctx.strokeStyle = 'rgba(255,220,160,0.14)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-r + 1, -r + 1, r * 2 - 2, r * 2 - 2);
+  }
+  if (dmg < 0.66) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.6, -r * 0.4);
+    ctx.lineTo(-r * 0.1, r * 0.15);
+    ctx.lineTo(r * 0.4, -r * 0.1);
+    ctx.stroke();
+  }
+  if (dmg < 0.33) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.beginPath();
+    ctx.moveTo(r * 0.5, -r * 0.7);
+    ctx.lineTo(0, 0);
+    ctx.lineTo(r * 0.2, r * 0.7);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPickup(ctx, pk, now, fx) {
+  const bob = Math.sin(now / 350 + pk.id) * 2.5;
+  const pulse = 0.65 + 0.35 * Math.sin(now / 300 + pk.id);
+  ctx.save();
+  ctx.translate(pk.x, pk.y + bob);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(0, 10 - bob, 10, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (pk.kind === 'evidence') {
+    ctx.shadowColor = '#ffd94f'; ctx.shadowBlur = 16 * fx * pulse;
+    ctx.fillStyle = '#e9c33f';
+    ctx.beginPath(); ctx.roundRect(-9, -11, 18, 22, 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#8a6d14';
+    ctx.fillRect(-9, -11, 18, 5);
+    ctx.fillStyle = '#0a0d12';
+    ctx.fillRect(-6, -3, 12, 2); ctx.fillRect(-6, 1, 12, 2); ctx.fillRect(-6, 5, 8, 2);
+    tag(ctx, 'EVIDENCE', 0, -20, '#ffd94f');
+  } else if (pk.kind === 'medkit') {
+    ctx.shadowColor = '#6dff9e'; ctx.shadowBlur = 12 * fx * pulse;
+    ctx.fillStyle = '#eef4f0';
+    ctx.beginPath(); ctx.roundRect(-10, -8, 20, 16, 3); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#2fae62';
+    ctx.fillRect(-2.5, -5.5, 5, 11); ctx.fillRect(-5.5, -2.5, 11, 5);
+  } else {
+    ctx.shadowColor = '#7db4ff'; ctx.shadowBlur = 12 * fx * pulse;
+    ctx.fillStyle = '#141a26';
+    ctx.beginPath(); ctx.roundRect(-14, -5, 28, 9, 2); ctx.fill();
+    ctx.fillStyle = '#39527a';
+    ctx.fillRect(2, -9, 7, 7);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#7db4ff';
+    ctx.fillRect(-11, -3, 5, 3);
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- effects
+
+function drawEffect(ctx, f, settings, fx) {
+  const t = f.t / f.dur;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.globalAlpha = Math.max(0, 1 - t) * fx;
+  if (f.kind === 'muzzle' && !settings.reducedFlash) {
+    ctx.rotate(f.a);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = '#fff4c8';
+    star(ctx, 0, 0, 4, 16, 5);
+    ctx.fillStyle = '#ffca6b';
+    ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(26, 0); ctx.lineTo(0, 4); ctx.fill();
+  } else if (f.kind === 'hit') {
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, 5 + t * 16, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#ffd0a0';
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + f.x;
+      const rr = 4 + t * 20;
+      line(ctx, Math.cos(a) * rr * 0.5, Math.sin(a) * rr * 0.5, Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+  } else if (f.kind === 'spark') {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = '#ffd94f';
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + f.x;
+      const rr = t * 22;
+      ctx.fillRect(Math.cos(a) * rr - 1.5, Math.sin(a) * rr - 1.5 - t * t * 10, 3, 3);
+    }
+  } else if (f.kind === 'debris' || f.kind === 'break') {
+    const n = f.kind === 'break' ? 9 : 5;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + f.x * 1.3;
+      const rr = t * (f.kind === 'break' ? 34 : 20);
+      ctx.save();
+      ctx.translate(Math.cos(a) * rr, Math.sin(a) * rr + t * t * 14);
+      ctx.rotate(a + t * 6);
+      ctx.fillStyle = i % 2 ? '#6b573b' : '#4a3c28';
+      ctx.fillRect(-3, -2, 6, 4);
+      ctx.restore();
+    }
+  } else if (f.kind === 'swing') {
+    ctx.rotate(f.a);
+    const g2 = ctx.createLinearGradient(0, -30, 0, 30);
+    g2.addColorStop(0, 'rgba(255,255,255,0)');
+    g2.addColorStop(0.5, 'rgba(255,255,255,0.9)');
+    g2.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle = g2;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 32, -0.95 + t * 0.7, 0.95 + t * 0.7);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- helpers
+
+function line(ctx, x0, y0, x1, y1) {
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+}
+
+function radial(ctx, x, y, r, color) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, color);
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+}
+
+function star(ctx, x, y, r0, r1, points) {
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 ? r0 : r1;
+    const a = (i / (points * 2)) * Math.PI * 2;
+    ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
 function shade(hex, f) {
+  if (!hex.startsWith('#')) return hex;
   const n = parseInt(hex.slice(1), 16);
-  const r = Math.round(((n >> 16) & 255) * f), g = Math.round(((n >> 8) & 255) * f), b = Math.round((n & 255) * f);
+  const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+  const g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+  const b = Math.min(255, Math.round((n & 255) * f));
   return `rgb(${r},${g},${b})`;
+}
+
+function hexA(hex, a) {
+  if (!hex.startsWith('#')) return hex;
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
