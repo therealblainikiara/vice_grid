@@ -1,0 +1,11 @@
+{
+  "name": "vice-grid",
+  "version": "0.1.0",
+  "description": "VICE GRID - original 2030 arcade narcotics-enforcement action game (ORIGINAL_SUCCESSOR rights mode)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "serve": "python -m http.server 8930"
+  }
+}
