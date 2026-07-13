@@ -93,6 +93,7 @@ function makeEnemy(typeKey, x, y, w) {
     cuffProgress: 0, searched: false, carriesIntel: Math.random() < 0.35,
     stunTimer: 0, hitFlash: 0, wanderA: Math.random() * TAU,
     counted: false, phase: 1,
+    shotTimer: 0.8 + Math.random() * 0.9, // reaction delay before first shot
   };
 }
 
@@ -116,7 +117,7 @@ export function addPlayer(w, agentKey, slot) {
     armor: a.armor, aimAngle: 0, aiming: false, moving: false,
     weapons: [makeWeaponState('pistol'), makeWeaponState('taser')],
     weaponIdx: 0, meleeCd: 0, dodgeTimer: 0, dodgeCd: 0, dodgeDx: 0, dodgeDy: 0,
-    iframes: 0, downed: false, reviveProgress: 0, hitFlash: 0,
+    iframes: 1.2, downed: false, reviveProgress: 0, hitFlash: 0, // brief spawn protection
     cuffingId: null, commandCd: 0, prev: {},
   };
   w.players.push(p);
@@ -155,7 +156,11 @@ function hasLos(w, x0, y0, x1, y1) {
   const steps = Math.ceil(d / (TILE / 3));
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
-    if (solidAt(w, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false;
+    const sx = x0 + (x1 - x0) * t, sy = y0 + (y1 - y0) * t;
+    if (solidAt(w, sx, sy)) return false;
+    for (const pr of w.props) {
+      if (pr.solid && pr.hp > 0 && dist(sx, sy, pr.x, pr.y) < pr.r) return false;
+    }
   }
   return true;
 }
@@ -507,8 +512,11 @@ function updateEnemy(w, e, dt) {
   const los = d < 700 && hasLos(w, e.x, e.y, player.x, player.y);
 
   if (e.state === 'IDLE') {
-    if ((los && d < 420) || w.threat > 0) { e.state = 'FIGHT'; e.stateTime = 0; }
-    else { wander(w, e, dt, 40); return; }
+    // aggro on sight, or on nearby gunfire — never a map-wide instant alert
+    if ((los && d < 420) || (w.threat > 0 && d < 560)) {
+      e.state = 'FIGHT'; e.stateTime = 0;
+      e.shotTimer = Math.max(e.shotTimer, 0.6 + w.rng() * 0.6);
+    } else { wander(w, e, dt, 40); return; }
   }
 
   if (e.state === 'SURRENDER' || e.state === 'FAKE_SURRENDER') {
@@ -563,19 +571,23 @@ function updateEnemy(w, e, dt) {
   moveCircle(w, e, (mx / ml) * e.speed * dt * w.difficulty.aggro, (my / ml) * e.speed * dt * w.difficulty.aggro);
   e.aimAngle = a;
 
-  // shoot
-  if (los && canFire(e.ws)) {
+  // shoot — enemies fire in a measured cadence, not at player trigger speed
+  e.shotTimer -= dt;
+  if (los && canFire(e.ws) && e.shotTimer <= 0) {
     const def = WEAPONS[e.ws.key];
+    e.shotTimer = Math.max(1.1, 2.2 / def.rof) * (0.8 + w.rng() * 0.5) / w.difficulty.aggro;
     if (!def.melee && d < def.range) {
       fire(e.ws);
-      const spread = def.spread * 2.2; // enemies are not marksmen
+      // enemies are not marksmen: wide spread that grows with distance,
+      // and their rounds hit players softer (arcade survivability)
+      const spread = def.spread * (2.2 + d / 400);
       for (let i = 0; i < (def.pellets ?? 1); i++) {
         const sa = a + (w.rng() - 0.5) * 2 * spread;
         w.bullets.push({
           x: e.x + Math.cos(sa) * (R + 6), y: e.y + Math.sin(sa) * (R + 6),
           vx: Math.cos(sa) * def.speed, vy: Math.sin(sa) * def.speed,
           weaponKey: e.ws.key, lethal: true, stun: 0,
-          dmgBase: def.damage * w.difficulty.enemyDmg,
+          dmgBase: def.damage * w.difficulty.enemyDmg * 0.55,
           ox: e.x, oy: e.y, fromPlayer: false, life: def.range / def.speed,
           knockback: def.knockback * 0.4,
         });

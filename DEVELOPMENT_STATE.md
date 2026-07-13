@@ -1,6 +1,16 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-14 (session 1)
+Updated: 2026-07-14 (session 1, checkpoint 2)
+
+## Session-1 verification results (browser, no god mode unless noted)
+- Full M01 arc E2E (god-mode harness): 13 arrests / 0 kills, escalation fired,
+  CHROME DOG phase 2 + surrender window + boss ARREST, grade B, campaign saved,
+  save survives reload ("Slot 1 — RHINO — mission 2 of 24", Continue enabled).
+- Fair-fight balance (no god mode): scripted player survived a 65 s firefight
+  at 95/150 hp, 160 shots @33% acc, cleared all 8 crew, escalation + boss spawn.
+- Standing-still survivability at spawn: ~10 s to 86/150 hp (props block enemy
+  line of sight; enemy cadence floor 1.1 s; enemy rounds hit players at 55%;
+  1.2 s spawn protection).
 
 ## Current working features
 - Pure logic layer, fully unit-tested (44 tests green): combat/weapons, arrest
@@ -35,20 +45,26 @@ Updated: 2026-07-14 (session 1)
   hidden tabs (not a defect in normal play; documented behaviour).
 - HUD P2 box only appears after drop-in; untested with a physical gamepad.
 
+## Hard-won environment notes
+- ALWAYS serve via `python tools/serve.py 8930` (Cache-Control: no-store).
+  Plain `python -m http.server` lets Chrome heuristically cache ES modules —
+  edits silently do not run and debugging chases ghosts.
+
 ## Placeholders (asset replacement register)
 - None. All art/audio is procedural and final-style; later missions may add
   placeholder maps — track them here.
 
 ## Exact next task
-Session 2: verify full M01 E2E in browser (script ready in transcript), commit
-checkpoint, then build m02 Club Neon Raid (interior map, hostage rooms) and the
-upgrade/respec screen between missions.
+Session 2: build m02 Club Neon Raid (interior map, hostage rooms, 'reach'
+objective) + the upgrade/respec screen between missions (data model exists in
+campaign.upgrades / upgradePoints). Then m03 Highway Glow Run begins the
+vehicle system (Phase 4 pull-forward).
 
 ## Commands required to resume
 ```
 cd C:\Users\PaulRyan\Documents\BNSGames\vice-grid
-node --test                 # 44 tests must pass
-python -m http.server 8930  # then open http://localhost:8930/  (or /vice-grid/ from repo root)
+node --test                   # 44 tests must pass
+python tools/serve.py 8930    # no-cache dev server; open http://localhost:8930/
 # in the browser console: __vg.skipToPlay('rhino'); __vg.tick(1)  — headless sim stepping
-git log --oneline           # checkpoint history
+git log --oneline             # checkpoint history
 ```
