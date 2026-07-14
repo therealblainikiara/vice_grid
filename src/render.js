@@ -457,6 +457,8 @@ function styleFor(e, settings) {
     midnight: { outfit: '#2c1f45', size: 1.24, head: 'cap' },
     tread: { outfit: '#4a3520', size: 1.3, head: 'cap', bulky: true },
     stacks: { outfit: '#4a4224', size: 1.5, head: 'bare', bulky: true },
+    crane: { outfit: '#28394a', size: 1.28, head: 'cap', bulky: true },
+    shiver: { outfit: '#1f4048', size: 1.06, head: 'hood' },
   }[e.type] ?? { outfit: '#324a2e', size: 1, head: 'bare' };
   return {
     ...base,

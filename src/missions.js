@@ -32,6 +32,8 @@ export const ENEMY_TYPES = {
   midnight: { hp: 300, speed: 165, weapon: 'smg',     personality: 'sly',    color: '#b06cff', score: 'boss', armor: 0.2, boss: true },
   tread:    { hp: 380, speed: 145, weapon: 'shotgun', personality: 'hard',   color: '#ffb04f', score: 'boss', armor: 0.25, boss: true },
   stacks:   { hp: 520, speed: 120, weapon: 'stormcaster', personality: 'hard', color: '#ffd94f', score: 'boss', armor: 0.35, boss: true },
+  crane:    { hp: 380, speed: 110, weapon: 'rifle',   personality: 'hard',   color: '#6cd8ff', score: 'boss', armor: 0.25, boss: true },
+  shiver:   { hp: 320, speed: 175, weapon: 'smg',     personality: 'sly',    color: '#a0f0ff', score: 'boss', armor: 0.15, boss: true },
 };
 
 // Full campaign skeleton. `implemented` gates mission select during development;
@@ -43,8 +45,8 @@ export const CAMPAIGN = [
   { id: 'm04', act: 1, n: 4, title: 'Warehouse Intercept', type: 'main', implemented: true },
   { id: 'op1', act: 1, n: 0, title: 'OP: Corner Sweep', type: 'op', implemented: false },
   { id: 'op2', act: 1, n: 0, title: 'OP: Glow Courier', type: 'op', implemented: false },
-  { id: 'm05', act: 2, n: 5, title: 'Port of Cobalt', type: 'main', implemented: false },
-  { id: 'm06', act: 2, n: 6, title: 'Tower Block Evac', type: 'main', implemented: false },
+  { id: 'm05', act: 2, n: 5, title: 'Port of Cobalt', type: 'main', implemented: true },
+  { id: 'm06', act: 2, n: 6, title: 'Tower Block Evac', type: 'main', implemented: true },
   { id: 'm07', act: 2, n: 7, title: 'Convoy Takedown', type: 'main', implemented: false },
   { id: 'm08', act: 2, n: 8, title: 'The Glow Kitchen', type: 'main', implemented: false },
   { id: 'op3', act: 2, n: 0, title: 'OP: Dockside Score Attack', type: 'op', implemented: false },
@@ -344,6 +346,140 @@ MISSIONS.m04 = {
     '#' + '~'.repeat(32) + '#',
     '##################################',
   ],
+};
+
+// Grid builder: sealed borders by construction — no ragged-row bugs.
+function buildMap(cols, rows, draw) {
+  const g = Array.from({ length: rows }, (_, y) =>
+    Array.from({ length: cols }, (_, x) => (x === 0 || y === 0 || x === cols - 1 || y === rows - 1 ? '#' : '.')));
+  const set = (x, y, ch) => { if (y > 0 && y < rows - 1 && x > 0 && x < cols - 1) g[y][x] = ch; };
+  const rect = (x0, y0, w, h, ch) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) set(x, y, ch); };
+  const rowFill = (y, ch) => rect(1, y, cols - 2, 1, ch);
+  draw({ set, rect, rowFill });
+  return g.map((r) => r.join(''));
+}
+
+MISSIONS.m05 = {
+  id: 'm05',
+  title: 'M05 — PORT OF COBALT',
+  parSec: 540,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Act Two, Grid. The Pier 9 ledger points at the Port of Cobalt intake yard — every crate of GLOW enters the city through these containers.',
+      'The yard chief is a dead-eyed lifer they call CRANE. He works high ground with a marksman rifle. Move stack to stack and do not linger in the lanes.',
+      'The shipping manifest in the yard office maps Act Two for us. Reach it, and take the yard.',
+      'Dock crews are still working. Same rules as always: names on warrants beat names on headstones.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Intake yard secured, manifest in hand. The product routes to a tower block cutting house and a rolling convoy.',
+      'CRANE\'s paperwork also mentions a "kitchen". Keep climbing, Grid.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The yard kept its secrets. Go back in — the manifest is everything.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize the intake crew', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
+    { id: 'boss', label: 'Take down CRANE', primary: true, type: 'boss' },
+    { id: 'office', label: 'Optional: Reach the manifest office', primary: false, type: 'reach', tag: 'gate' },
+    { id: 'cuffs', label: 'Optional: Arrest 4 suspects', primary: false, type: 'arrest', count: 4 },
+    { id: 'ledger', label: 'Optional: Seize the manifest + the sample crate', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'GATE CREW FLOODS THE YARD',
+    spawns: [
+      { type: 'bruiser', x: 2, y: 17 }, { type: 'dealer', x: 3, y: 17 },
+      { type: 'soldier', x: 38, y: 17 }, { type: 'dealer', x: 39, y: 17 },
+    ],
+  },
+  boss: {
+    type: 'crane', x: 21, y: 2, name: 'CRANE',
+    intro: 'CRANE: "Wrong yard, badge. I never miss twice."',
+    phase2At: 0.5, phase2Banner: 'CRANE DROPS THE CONTAINERS',
+    phase2Spawns: [{ type: 'bruiser', x: 10, y: 9 }, { type: 'bruiser', x: 26, y: 9 }],
+    surrenderAt: 0.18,
+  },
+  map: buildMap(42, 20, ({ set, rect, rowFill }) => {
+    rowFill(16, ','); rowFill(17, '~'); rowFill(18, '~');
+    // container stacks in staggered rows
+    for (const [cx, cy] of [[4, 3], [12, 3], [20, 3], [28, 3], [5, 7], [13, 7], [21, 7], [29, 7], [4, 11], [12, 11], [20, 11], [28, 11]]) rect(cx, cy, 4, 2, '#');
+    // manifest office
+    rect(34, 1, 7, 4, '#');
+    rect(35, 2, 5, 2, '.');
+    set(34, 3, '.'); // office door
+    set(37, 2, 'V');
+    set(38, 3, 'X');
+    // crew
+    for (const [x, y] of [[8, 4], [17, 4], [25, 4], [33, 4], [9, 8], [18, 8], [26, 8], [8, 12], [17, 12], [25, 12], [33, 9]]) set(x, y, 'E');
+    for (const [x, y] of [[6, 14], [18, 14], [30, 14], [11, 5]]) set(x, y, 'C');
+    set(2, 12, 'V');
+    set(10, 16, 'w'); set(26, 16, 'p'); set(36, 12, 'm');
+    set(3, 16, 'P');
+  }),
+};
+
+MISSIONS.m06 = {
+  id: 'm06',
+  title: 'M06 — TOWER BLOCK EVAC',
+  parSec: 600,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Glowline turned a Southside tower block into a cutting house, and tonight they are clearing the witnesses — meaning the residents.',
+      'Their floor boss SHIVER is holding the top floor. Work your way up, floor by floor, stairwell by stairwell.',
+      'Residents are hiding in the corridors. This one is different, Grid: if the crowd bleeds, the mission is over. One mistake is all the city will forgive.',
+      'Cutting-room paperwork is scattered through the flats. Bag what you can on the climb.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Tower secure, residents breathing. The cutting-room notes name an armoured convoy moving product tomorrow night.',
+      'SHIVER\'s phone is full of texts from someone called THE CHEMIST. Act Two is getting warm.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['We lost the tower. Those people needed better from us — again, and cleaner.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize the cutting-house crew', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
+    { id: 'boss', label: 'Take down SHIVER', primary: true, type: 'boss' },
+    { id: 'civs', label: 'Keep the residents safe (2 strikes allowed)', primary: true, type: 'protect', count: 2 },
+    { id: 'cuffs', label: 'Optional: Arrest 4 suspects', primary: false, type: 'arrest', count: 4 },
+    { id: 'ledger', label: 'Optional: Recover the cutting-room papers', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'REINFORCEMENTS IN THE LOBBY',
+    spawns: [
+      { type: 'dealer', x: 26, y: 19 }, { type: 'soldier', x: 27, y: 19 },
+      { type: 'bouncer', x: 25, y: 19 }, { type: 'dealer', x: 24, y: 19 },
+    ],
+  },
+  boss: {
+    type: 'shiver', x: 14, y: 2, name: 'SHIVER',
+    intro: 'SHIVER: "You climbed all this way to fall back down?"',
+    phase2At: 0.5, phase2Banner: 'SHIVER TORCHES THE CORRIDOR',
+    phase2Spawns: [{ type: 'vipguard', x: 10, y: 5 }, { type: 'vipguard', x: 18, y: 5 }],
+    surrenderAt: 0.22,
+  },
+  map: buildMap(30, 22, ({ set, rect, rowFill }) => {
+    rowFill(7, '#'); rowFill(14, '#');           // floor slabs
+    set(26, 7, '.'); set(27, 7, '.');            // east stairwell (2F -> 3F)
+    set(2, 14, '.'); set(3, 14, '.');            // west stairwell (1F -> 2F)
+    // apartment partition stubs per floor
+    for (const y of [1, 8, 15]) for (const x of [6, 12, 18, 24]) rect(x, y, 1, 4, '#');
+    // crew: 3 on floor 1 (bottom), 4 on floor 2, 3 on floor 3 (top)
+    for (const [x, y] of [[9, 17], [15, 17], [21, 17]]) set(x, y, 'E');
+    for (const [x, y] of [[4, 10], [10, 10], [16, 10], [22, 10]]) set(x, y, 'E');
+    for (const [x, y] of [[8, 3], [20, 3], [26, 3]]) set(x, y, 'E');
+    // residents
+    for (const [x, y] of [[4, 18], [13, 18], [25, 16], [8, 12], [14, 12], [20, 12], [10, 5], [22, 5]]) set(x, y, 'C');
+    set(4, 2, 'V'); set(16, 9, 'V');
+    set(27, 17, 'p'); set(27, 9, 'm'); set(9, 9, 'w');
+    set(2, 19, 'P');
+  }),
 };
 
 // Ops and later missions reuse this framework; each definition slots into

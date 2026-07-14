@@ -8,7 +8,7 @@ import { UPGRADE_DEFS } from './upgrades.js';
 const $ = (id) => document.getElementById(id);
 
 export function makeUI(settings, audio) {
-  const screens = ['title', 'menu', 'agent', 'briefing', 'pause', 'results', 'settings', 'credits', 'upgrade'];
+  const screens = ['title', 'menu', 'agent', 'briefing', 'pause', 'results', 'settings', 'credits', 'upgrade', 'missions'];
   let bannerTimer = null, subtitleTimer = null;
 
   function show(name) {
@@ -189,7 +189,20 @@ export function makeUI(settings, audio) {
     show('upgrade');
   }
 
-  return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults, buildSettingsPanel, showUpgrade, liveScore };
+  // Mission replay list. rows: [{id, title, grade, locked}]
+  function showMissionSelect(rows, onPick) {
+    $('missions-body').innerHTML = rows.map((r) => `
+      <div class="uprow">
+        <div class="upinfo"><b>${escapeHtml(r.title)}</b><small>${r.locked ? 'Locked — reach it in the campaign' : r.grade ? `Best grade: ${r.grade}` : 'Cleared'}</small></div>
+        <div class="upctl"><button data-mid="${r.id}" ${r.locked ? 'disabled' : ''}>Replay</button></div>
+      </div>`).join('');
+    $('missions-body').querySelectorAll('button[data-mid]').forEach((b) => {
+      b.addEventListener('click', () => onPick(b.dataset.mid));
+    });
+    show('missions');
+  }
+
+  return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults, buildSettingsPanel, showUpgrade, showMissionSelect, liveScore };
 }
 
 function escapeHtml(s) {

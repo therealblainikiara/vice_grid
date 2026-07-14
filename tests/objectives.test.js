@@ -38,6 +38,17 @@ test('protect objective fails when threshold exceeded, and only then', () => {
   assert.equal(primaryFailed(o), false); // it was optional
 });
 
+test('an un-failed primary protect objective does not block completion', () => {
+  const o = createObjectives([
+    { id: 'clear', label: 'clear', primary: true, type: 'evidence', count: 1 },
+    { id: 'vip', label: 'protect', primary: true, type: 'protect', count: 1 },
+  ]);
+  applyEvent(o, { type: 'evidence' });
+  applyEvent(o, { type: 'civilianHurt' }); // one strike, within allowance
+  assert.equal(primaryComplete(o), true);
+  assert.equal(primaryFailed(o), false);
+});
+
 test('a failed primary protect objective fails the mission', () => {
   const o = createObjectives([
     { id: 'vip', label: 'Keep the witness alive', primary: true, type: 'protect', count: 0 },

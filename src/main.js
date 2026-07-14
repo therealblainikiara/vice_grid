@@ -20,12 +20,14 @@ const audio = makeAudio(settings);
 const ui = makeUI(settings, audio);
 const input = makeInput(canvas, settings);
 
-let state = 'title';      // title | menu | agent | briefing | play | pause | results | settings | credits
+let state = 'title';      // title | menu | agent | briefing | play | pause | results | settings | credits | upgrade | missions
 let settingsReturn = 'menu';
 let campaign = null;
 let world = null;
 let coopArmed = false;
 let pauseLatch = false;
+let replayMode = false;
+const GRADE_RANK = { S: 5, A: 4, B: 3, C: 2, D: 1 };
 
 const fx = {
   shot: (k, x, y) => audio.shot(k, x, y),
@@ -68,12 +70,14 @@ function toMenu() {
 function toAgentSelect() { state = 'agent'; ui.show('agent'); }
 
 function startCampaign(agentKey) {
+  replayMode = false;
   campaign = newCampaign(agentKey);
   store.save(0, campaign);
   startMission(currentMissionId());
 }
 
 function continueCampaign() {
+  replayMode = false;
   campaign = store.load(0);
   if (!campaign) return toMenu();
   startMission(currentMissionId());
@@ -109,7 +113,17 @@ function finishMission(win) {
   const mission = world.mission;
   const stats = world.stats;
   const grade = gradeMission(stats);
-  if (win) {
+  if (win && replayMode) {
+    // replay: keep the best grade, totals still count, no campaign advance
+    const prev = campaign.grades[mission.id];
+    if (!prev || GRADE_RANK[grade.grade] > GRADE_RANK[prev]) campaign.grades[mission.id] = grade.grade;
+    campaign.totals.arrests += stats.arrests;
+    campaign.totals.kills += stats.kills;
+    campaign.totals.evidence += stats.evidenceFound;
+    campaign.totals.civiliansKilled += stats.civiliansKilled;
+    campaign.totals.intel += stats.intel ?? 0;
+    store.save(0, campaign);
+  } else if (win) {
     campaign.grades[mission.id] = grade.grade;
     campaign.totals.arrests += stats.arrests;
     campaign.totals.kills += stats.kills;
@@ -147,10 +161,27 @@ on('btn-restart-cp', () => { restoreCheckpoint(world); resumeFromPause(); });
 on('btn-quit', () => { world = null; toMenu(); });
 on('btn-retry', () => { restoreCheckpoint(world); state = 'play'; ui.show(null); audio.setMusic('calm'); });
 on('btn-next', () => {
+  if (replayMode) { replayMode = false; return toMenu(); }
   const mains = CAMPAIGN.filter((m) => m.type === 'main');
   if (campaign.missionIndex >= mains.length) { state = 'credits'; ui.show('credits'); }
   else showUpgradeScreen();
 });
+on('btn-missions', () => {
+  campaign = campaign ?? store.load(0);
+  if (!campaign) return;
+  state = 'missions';
+  const mains = CAMPAIGN.filter((m) => m.type === 'main');
+  ui.showMissionSelect(
+    mains.map((m, i) => ({
+      id: m.id,
+      title: `M${String(i + 1).padStart(2, '0')} — ${m.title}`,
+      grade: campaign.grades[m.id],
+      locked: !m.implemented || i > campaign.missionIndex,
+    })),
+    (id) => { replayMode = true; startMission(id); },
+  );
+});
+on('btn-missions-back', toMenu);
 function showUpgradeScreen() {
   state = 'upgrade';
   ui.showUpgrade(campaign, (key, isBuy) => {

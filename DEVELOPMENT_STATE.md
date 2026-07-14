@@ -1,6 +1,24 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-14 (session 5, checkpoint 6) — ACT 1 COMPLETE (m01–m04)
+Updated: 2026-07-15 (session 6, checkpoint 7) — m01–m06 playable
+
+## Session-6: Act 2 opens (m05, m06) + mission replay (browser-verified)
+- buildMap() grid builder in missions.js: sealed borders by construction —
+  the ragged-row bug class is now impossible for new missions.
+- m05 Port of Cobalt: container-stack yard (staggered '#' stacks as cover
+  lanes), manifest office with reach gate + evidence, 11 crew, gate-crew
+  escalation, boss CRANE (DMR marksman, phase 2 drops container bruisers,
+  surrenders at 18%). E2E: CRANE arrested, 16 arrests / 0 kills.
+- m06 Tower Block Evac: three stacked floors with alternating stairwells,
+  8 residents, PRIMARY protect objective (2 strikes), boss SHIVER (sly smg,
+  phase 2 vipguards). E2E: SHIVER arrested, survived on exactly 2 strikes,
+  grade B.
+- CORE FIX (found by m06 E2E): primary protect objectives deadlocked mission
+  completion — primaryComplete() now treats un-failed protect as satisfied
+  (regression unit test added). 63 tests green.
+- Mission Replay: main-menu screen listing mains with best grades and
+  campaign-progress locks; replay keeps best grade, accumulates totals, never
+  advances missionIndex; results → menu. Verified through the real flow.
 
 ## Session-5: m04 Warehouse Intercept closes Act 1 (browser-verified)
 - MISSIONS.m04: Pier 9 bonded warehouse — crate-maze hall, storage rooms,
@@ -131,12 +149,11 @@ Updated: 2026-07-14 (session 5, checkpoint 6) — ACT 1 COMPLETE (m01–m04)
   placeholder maps — track them here.
 
 ## Exact next task
-Session 6: Act 2 — m05 Port of Cobalt (container yard, mixed foot+vehicle),
-m06 Tower Block Evac (hostage floors, 'reach' extraction objectives). Then
-m07 Convoy Takedown (armoured convoy = tougher vehicle mission) and m08 The
-Glow Kitchen (Boss: THE CHEMIST) to close Act 2. Also consider: Act-gate
-narrative interstitials between acts (cheap: briefing-style screens), and
-mission select/replay from the menu (CAMPAIGN data already supports it).
+Session 7: m07 Convoy Takedown (armoured convoy — reuse vehicle system with
+tougher escorts + an armoured hauler; consider a mounted-gun escort variant)
+and m08 The Glow Kitchen (Boss: THE CHEMIST — lab interior, environmental
+hazard idea: volatile vats as explosive props) to close Act 2. Then Act 3.
+Also: co-op split of upgrade points is untested with a physical gamepad.
 
 ## Commands required to resume
 ```

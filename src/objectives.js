@@ -52,7 +52,8 @@ function bump(o) {
 }
 
 export function primaryComplete(objectives) {
-  return objectives.filter((o) => o.primary).every((o) => o.done);
+  // an un-failed protect objective is being satisfied continuously
+  return objectives.filter((o) => o.primary).every((o) => o.done || (o.type === 'protect' && !o.failed));
 }
 
 export function primaryFailed(objectives) {
