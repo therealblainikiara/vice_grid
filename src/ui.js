@@ -80,7 +80,12 @@ export function makeUI(settings, audio) {
       $('p' + (slot + 1) + 'hp').style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
       const ws = p.weapons[p.weaponIdx];
       const def = WEAPONS[ws.key];
-      $('p' + (slot + 1) + 'ammo').textContent = ws.reloading > 0 ? 'RELOADING' : def.melee ? def.name : `${def.name} ${ws.ammo}/${def.mag}`;
+      let line = ws.reloading > 0 ? 'RELOADING' : def.melee ? def.name : `${def.name} ${ws.ammo}/${def.mag}`;
+      if (p.vehicleId != null) {
+        const v = world.vehicles?.find((x) => x.id === p.vehicleId);
+        if (v) line = `VEHICLE ${Math.max(0, Math.round((v.hp / v.maxHp) * 100))}% · ${line}`;
+      }
+      $('p' + (slot + 1) + 'ammo').textContent = line;
     }
     $('score').textContent = String(liveScore(world.stats));
     $('objectives').innerHTML = summary(world.objectives).map((o) => {

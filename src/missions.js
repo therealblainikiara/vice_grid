@@ -30,6 +30,7 @@ export const ENEMY_TYPES = {
   // Bosses
   chromedog:{ hp: 420, speed: 130, weapon: 'shotgun', personality: 'hard',   color: '#c8ff2f', score: 'boss', armor: 0.3, boss: true },
   midnight: { hp: 300, speed: 165, weapon: 'smg',     personality: 'sly',    color: '#b06cff', score: 'boss', armor: 0.2, boss: true },
+  tread:    { hp: 380, speed: 145, weapon: 'shotgun', personality: 'hard',   color: '#ffb04f', score: 'boss', armor: 0.25, boss: true },
 };
 
 // Full campaign skeleton. `implemented` gates mission select during development;
@@ -37,7 +38,7 @@ export const ENEMY_TYPES = {
 export const CAMPAIGN = [
   { id: 'm01', act: 1, n: 1, title: 'Store Siege', type: 'main', implemented: true },
   { id: 'm02', act: 1, n: 2, title: 'Club Neon Raid', type: 'main', implemented: true },
-  { id: 'm03', act: 1, n: 3, title: 'Highway Glow Run', type: 'main', implemented: false },
+  { id: 'm03', act: 1, n: 3, title: 'Highway Glow Run', type: 'main', implemented: true },
   { id: 'm04', act: 1, n: 4, title: 'Warehouse Intercept', type: 'main', implemented: false },
   { id: 'op1', act: 1, n: 0, title: 'OP: Corner Sweep', type: 'op', implemented: false },
   { id: 'op2', act: 1, n: 0, title: 'OP: Glow Courier', type: 'op', implemented: false },
@@ -191,6 +192,90 @@ MISSIONS.m02 = {
     '#,,P,,,,,,,,,,,,,,,,,,,,,C,,,#',
     '#~~~~~~~~~~~~~~~~~~~~~~~~~~~~#',
     '##############################',
+  ],
+};
+
+// m03: an expressway built programmatically — 128 tiles of eastbound pursuit.
+const HW_COLS = 128;
+function hwRow(fill, decorate = null) {
+  let s = '';
+  for (let x = 0; x < HW_COLS; x++) {
+    if (x === 0 || x === HW_COLS - 1) { s += '#'; continue; }
+    s += decorate?.(x) ?? fill;
+  }
+  return s;
+}
+
+MISSIONS.m03 = {
+  id: 'm03',
+  title: 'M03 — HIGHWAY GLOW RUN',
+  parSec: 300,
+  playerVehicle: { type: 'patrol', x: 4, y: 12 },
+  vehicles: [
+    { type: 'gangcar', x: 22, y: 9,  tag: 'escort', ai: 'escort', cruise: 250 },
+    { type: 'gangcar', x: 26, y: 11, tag: 'escort', ai: 'escort', cruise: 250 },
+    { type: 'gangcar', x: 30, y: 10, tag: 'escort', ai: 'escort', cruise: 250 },
+    { type: 'truck',   x: 34, y: 10, tag: 'truck',  ai: 'convoy', cruise: 175 },
+  ],
+  traffic: { rows: [3, 5, 9, 11], eastRows: [9, 11], rate: 2.2, max: 7 },
+  civilianBaseline: 10,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'MIDNIGHT\'s books flagged tonight\'s shipment: a hauler full of raw GLOW heading for the city limits on the Cobalt Expressway.',
+      'You have the interceptor. Escort runners will try to box you out — shoot their engines or run them off the road.',
+      'Stop that truck before the limits, Grid. If it crosses, the network scatters and Act One goes cold.',
+      'The wheelman is a Glowline legend called TREAD. When the hauler stops, he will not come out friendly.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Shipment secured on the shoulder. Traffic units are picking up the runners you left cuffed on the asphalt.',
+      'That hauler was heading for a warehouse on the pier. One more door and Act One is closed.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The expressway ate the pursuit. Rewind it and drive cleaner.'] },
+  objectives: [
+    { id: 'clear', label: 'Disable the escort runners', primary: true, type: 'neutralize', count: 3, tag: 'escort' },
+    { id: 'boss', label: 'Stop the hauler and take down TREAD', primary: true, type: 'boss' },
+    { id: 'cuffs', label: 'Optional: Arrest 2 suspects', primary: false, type: 'arrest', count: 2 },
+    { id: 'civs', label: 'Optional: Keep commuters out of it (1 strike allowed)', primary: false, type: 'protect', count: 1 },
+    { id: 'gate', label: 'Optional: Catch the convoy before the interchange', primary: false, type: 'reach', tag: 'gate' },
+  ],
+  escalation: {
+    at: 2,
+    banner: 'GLOWLINE OUTRIDERS INBOUND',
+    spawns: [],
+    vehicles: [
+      { type: 'gangbike', x: 8, y: 9,  tag: 'outrider', ai: 'escort', cruise: 320 },
+      { type: 'gangbike', x: 8, y: 11, tag: 'outrider', ai: 'escort', cruise: 320 },
+    ],
+  },
+  boss: {
+    type: 'tread', x: 96, y: 10, trigger: 'truck', name: 'TREAD',
+    intro: 'TREAD: "You scratched my hauler. I\'m going to fold your little car in half."',
+    phase2At: 0.5, phase2Banner: 'TREAD TEARS OFF THE DOOR PANEL',
+    phase2Spawns: [],
+    surrenderAt: 0.25,
+  },
+  map: [
+    hwRow('#'),
+    hwRow(','),
+    hwRow(','),
+    hwRow('~'),                                   // westbound lanes 3-6
+    hwRow('~'),
+    hwRow('~'),
+    hwRow('~'),
+    hwRow('=', (x) => (x % 14 === 0 ? '~' : '=')), // median with gaps
+    hwRow('~'),                                   // eastbound lanes 8-12
+    hwRow('~'),
+    hwRow('~', (x) => (x === 100 ? 'X' : '~')),   // interchange gate
+    hwRow('~'),
+    hwRow('~', (x) => (x === 4 ? 'P' : '~')),
+    hwRow(','),
+    hwRow(',', (x) => (x % 23 === 0 ? 'c' : ',')),
+    hwRow('#'),
   ],
 };
 

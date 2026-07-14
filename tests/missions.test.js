@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CAMPAIGN, MISSIONS, ENEMY_TYPES } from '../src/missions.js';
+import { VEHICLE_TYPES } from '../src/vehicles.js';
 
 const implemented = CAMPAIGN.filter((m) => m.implemented);
 
@@ -36,7 +37,20 @@ for (const entry of implemented) {
     assert.ok(count('P') >= 1, 'no player spawn');
 
     const clear = m.objectives.find((o) => o.id === 'clear');
-    if (clear) assert.ok(count('E') >= clear.count, `only ${count('E')} enemies for clear count ${clear.count}`);
+    if (clear) {
+      const vehicleFoes = (m.vehicles ?? []).filter((v) => v.tag === clear.tag).length;
+      const pool = count('E') + vehicleFoes;
+      assert.ok(pool >= clear.count, `only ${pool} targets for clear count ${clear.count}`);
+    }
+
+    for (const vd of m.vehicles ?? []) {
+      assert.ok(VEHICLE_TYPES[vd.type], `unknown vehicle type ${vd.type}`);
+      assert.ok(rows[vd.y]?.[vd.x] && rows[vd.y][vd.x] !== '#', 'vehicle spawns in a wall');
+    }
+    for (const vd of m.escalation?.vehicles ?? []) {
+      assert.ok(VEHICLE_TYPES[vd.type], `unknown escalation vehicle type ${vd.type}`);
+    }
+    if (m.playerVehicle) assert.ok(VEHICLE_TYPES[m.playerVehicle.type], 'unknown player vehicle type');
 
     const evid = m.objectives.find((o) => o.type === 'evidence');
     if (evid) assert.equal(count('V'), evid.count, 'evidence pickups != objective count');

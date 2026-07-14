@@ -64,6 +64,21 @@ export function draw(ctx, w, settings) {
   // 4) props (crates / shelves with damage states)
   for (const pr of w.props) drawProp(ctx, pr);
 
+  // 4.5) reach zones + vehicles (under people, over floor)
+  for (const z of w.zones ?? []) {
+    if (z.done) continue;
+    const pulse = 0.5 + 0.5 * Math.sin(now / 300);
+    ctx.save();
+    ctx.strokeStyle = hexA('#58d0ba', 0.35 + 0.4 * pulse);
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r * (0.9 + 0.1 * pulse), 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    tag(ctx, 'INTERCHANGE GATE', z.x, z.y - z.r - 8, '#58d0ba');
+    ctx.restore();
+  }
+  for (const v of w.vehicles ?? []) drawVehicle(ctx, v, settings, fx, now);
+
   // 5) entities, painter-sorted by y for correct overlap
   const bodies = [...w.civilians, ...w.enemies, ...w.players].sort((a, b) => a.y - b.y);
   for (const e of bodies) drawHumanoid(ctx, w, e, settings, fx, now);
@@ -182,6 +197,12 @@ function drawLighting(ctx, w, settings, fx, sx, sy, W, H, now) {
   };
 
   for (const p of w.players) cut(p.x, p.y, 260, 0.95);
+  for (const v of w.vehicles ?? []) {
+    if (v.disabled) continue;
+    // headlights push a pool of light ahead of the car
+    cut(v.x + Math.cos(v.angle) * 90, v.y + Math.sin(v.angle) * 90, 150, 0.75);
+    if (v.type === 'patrol') cut(v.x, v.y, 200, 0.85);
+  }
   for (const s of cache.lights) cut(s.x, s.y, s.r, 0.85);
   for (const pk of w.pickups) cut(pk.x, pk.y, 80, 0.75);
   for (const e of w.enemies) {
@@ -678,6 +699,17 @@ function drawProp(ctx, pr) {
   ctx.beginPath();
   ctx.ellipse(3, r * 0.5 + 3, r, r * 0.45, 0, 0, Math.PI * 2);
   ctx.fill();
+  if (pr.kind === 'barrier') {
+    // concrete jersey barrier
+    ctx.fillStyle = '#39414f';
+    ctx.beginPath(); ctx.roundRect(-r, -r * 0.55, r * 2, r * 1.1, 4); ctx.fill();
+    ctx.fillStyle = '#4a5464';
+    ctx.fillRect(-r, -r * 0.55, r * 2, 4);
+    ctx.fillStyle = 'rgba(255,217,79,0.5)';
+    ctx.fillRect(-r + 3, -2, 8, 4); ctx.fillRect(r - 11, -2, 8, 4);
+    ctx.restore();
+    return;
+  }
   if (pr.kind === 'shelf') {
     ctx.fillStyle = '#2e3c50';
     ctx.fillRect(-r, -r, r * 2, r * 2);
@@ -759,6 +791,106 @@ function drawPickup(ctx, pk, now, fx) {
     ctx.fillRect(-11, -3, 5, 3);
   }
   ctx.restore();
+}
+
+// ---------------------------------------------------------------- vehicles
+
+import { VEHICLE_TYPES } from './vehicles.js';
+
+function drawVehicle(ctx, v, settings, fx, now) {
+  const t = VEHICLE_TYPES[v.type];
+  const L = v.r * 2.3, W2 = v.r * 1.35;
+  ctx.save();
+  ctx.translate(v.x, v.y);
+
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath(); ctx.ellipse(3, 5, L * 0.52, W2 * 0.6, v.angle, 0, Math.PI * 2); ctx.fill();
+
+  ctx.rotate(v.angle);
+  const body = v.disabled ? shade(t.color, 0.45) : t.color;
+
+  if (v.hitFlash > 0 && !settings.reducedFlash) { ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 18; }
+
+  // wheels
+  ctx.fillStyle = '#0b0e13';
+  for (const [wx, wy] of [[-L * 0.32, -W2 * 0.52], [-L * 0.32, W2 * 0.52], [L * 0.3, -W2 * 0.52], [L * 0.3, W2 * 0.52]]) {
+    ctx.fillRect(wx - 5, wy - 3, 10, 6);
+  }
+  // body
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.roundRect(-L / 2, -W2 / 2, L, W2, 6); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  if (v.type === 'truck') {
+    // cargo box with satirical branding
+    ctx.fillStyle = shade(body, 1.25);
+    ctx.beginPath(); ctx.roundRect(-L / 2 + 4, -W2 / 2 + 3, L * 0.62, W2 - 6, 3); ctx.fill();
+    ctx.save();
+    ctx.rotate(Math.PI / 2);
+    ctx.font = 'bold 10px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9dff57';
+    ctx.fillText('GLOW⁰', 0, L * 0.12);
+    ctx.restore();
+    // cab windshield
+    ctx.fillStyle = '#101722';
+    ctx.fillRect(L * 0.22, -W2 / 2 + 4, 6, W2 - 8);
+  } else {
+    // roof + windshield
+    ctx.fillStyle = shade(body, 0.7);
+    ctx.beginPath(); ctx.roundRect(-L * 0.18, -W2 / 2 + 3, L * 0.42, W2 - 6, 4); ctx.fill();
+    ctx.fillStyle = '#101722';
+    ctx.fillRect(L * 0.22, -W2 / 2 + 4, 5, W2 - 8);
+  }
+
+  if (!v.disabled) {
+    // headlights + taillights
+    ctx.fillStyle = '#fff2ba';
+    ctx.fillRect(L / 2 - 3, -W2 / 2 + 2, 3, 5);
+    ctx.fillRect(L / 2 - 3, W2 / 2 - 7, 3, 5);
+    ctx.fillStyle = t.tail;
+    ctx.fillRect(-L / 2, -W2 / 2 + 2, 3, 5);
+    ctx.fillRect(-L / 2, W2 / 2 - 7, 3, 5);
+  }
+
+  // patrol lightbar
+  if (v.type === 'patrol' && !v.disabled) {
+    const phase = settings.reducedFlash ? 0.5 : (Math.floor(now / 180) % 2);
+    ctx.shadowBlur = settings.reducedFlash ? 6 : 14;
+    ctx.shadowColor = phase ? '#ff4040' : '#31a8ff';
+    ctx.fillStyle = settings.reducedFlash ? '#b06cff' : (phase ? '#ff4040' : '#31a8ff');
+    ctx.fillRect(-4, -W2 / 2 + 4, 8, W2 - 8);
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+
+  // damage smoke (world-space, drifts up)
+  if ((v.disabled || v.hp < v.maxHp * 0.4) && !settings.reducedFlash) {
+    ctx.save();
+    for (let i = 0; i < 3; i++) {
+      const tt = ((now / 900) + i * 0.33) % 1;
+      ctx.globalAlpha = (1 - tt) * 0.35 * fx;
+      ctx.fillStyle = v.disabled ? '#222' : '#555';
+      ctx.beginPath();
+      ctx.arc(v.x - Math.cos(v.angle) * v.r * 0.6 + Math.sin(now / 300 + i) * 6, v.y - Math.sin(v.angle) * v.r * 0.6 - tt * 30, 4 + tt * 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // hp pip for hostile vehicles
+  if (!v.disabled && v.tag && v.hp < v.maxHp) {
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(v.x - 18, v.y - v.r - 12, 36, 4);
+    ctx.fillStyle = v.tag === 'truck' ? '#ffca6b' : '#ff8a3d';
+    ctx.fillRect(v.x - 17, v.y - v.r - 11, 34 * (v.hp / v.maxHp), 2);
+  }
+  if (v.tag === 'truck' && !v.disabled) tag(ctx, 'SHIPMENT', v.x, v.y - v.r - 18, '#ffca6b');
 }
 
 // ---------------------------------------------------------------- effects

@@ -13,6 +13,7 @@ import {
   createObjectives, applyEvent, primaryComplete, primaryFailed,
 } from './objectives.js';
 import { AGENTS, ENEMY_TYPES } from './missions.js';
+import { VEHICLE_TYPES, makeVehicle, stepVehicle, ramDamage, damageVehicle } from './vehicles.js';
 
 export const TILE = 48;
 export const ZOOM = 1.45; // camera zoom: world px -> screen px
@@ -29,6 +30,7 @@ export function createWorld(mission, opts) {
     cols: mission.map[0].length, rows: mission.map.length,
     walls: new Set(), roads: new Set(),
     players: [], enemies: [], civilians: [], bullets: [], pickups: [], props: [], effects: [],
+    vehicles: [], zones: [], trafficTimer: 0, truckDown: false,
     objectives: createObjectives(mission.objectives),
     stats: {
       timeSec: 0, parSec: mission.parSec, arrests: 0, kills: 0, downs: 0,
@@ -60,12 +62,33 @@ export function createWorld(mission, opts) {
         case 'w': w.pickups.push({ id: id(), kind: 'weapon', weaponKey: rng.chance(0.5) ? 'shotgun' : 'smg', x, y }); break;
         case 'p': w.pickups.push({ id: id(), kind: 'weapon', weaponKey: 'beanbag', x, y }); break;
         case 'm': w.pickups.push({ id: id(), kind: 'medkit', x, y }); break;
+        case '=': w.props.push({ id: id(), kind: 'barrier', x, y, hp: Infinity, solid: true, r: 20 }); break;
+        case 'X': w.zones.push({ x, y, r: 80, tag: 'gate', done: false }); break;
       }
     });
   });
 
+  w.stats.civiliansTotal += mission.civilianBaseline ?? 0;
+  for (const vd of mission.vehicles ?? []) {
+    w.vehicles.push(makeVehicle(vd.type, vd.x * TILE, vd.y * TILE + TILE / 2, {
+      tag: vd.tag, ai: vd.ai, laneY: vd.y * TILE + TILE / 2, cruise: vd.cruise ?? 0,
+    }));
+  }
+  if (mission.playerVehicle) {
+    const pv = makeVehicle(mission.playerVehicle.type, mission.playerVehicle.x * TILE, mission.playerVehicle.y * TILE + TILE / 2);
+    w.vehicles.push(pv);
+    w.playerVehicleId = pv.id;
+  }
+
   addPlayer(w, opts.agentKey ?? 'rhino', 0);
   if (opts.coop) addPlayer(w, opts.agentKey === 'rhino' ? 'viper' : 'rhino', 1);
+  if (w.playerVehicleId) {
+    // pursuit missions start behind the wheel
+    for (const p of w.players) { p.vehicleId = w.playerVehicleId; }
+    const pv = w.vehicles.find((v) => v.id === w.playerVehicleId);
+    pv.driverSlot = 0;
+    for (const p of w.players) { p.x = pv.x; p.y = pv.y; }
+  }
   const sp = w.spawnPoints[0] ?? { x: TILE * 2, y: TILE * 2 };
   w.cam.x = sp.x; w.cam.y = sp.y;
   saveCheckpoint(w);
@@ -201,8 +224,10 @@ function neutralize(w, e, how) {
 
 function saveCheckpoint(w) {
   w.checkpoint = structuredClone({
-    players: w.players.map((p) => ({ slot: p.slot, agentKey: p.agentKey, x: p.x, y: p.y, hp: p.hp, weapons: p.weapons, weaponIdx: p.weaponIdx })),
-    enemies: w.enemies, civilians: w.civilians, pickups: w.pickups, props: w.props,
+    players: w.players.map((p) => ({ slot: p.slot, agentKey: p.agentKey, x: p.x, y: p.y, hp: p.hp, weapons: p.weapons, weaponIdx: p.weaponIdx, vehicleId: p.vehicleId ?? null })),
+    enemies: w.enemies, civilians: w.civilians, pickups: w.pickups,
+    props: w.props.filter((pr) => pr.hp !== Infinity ? true : true),
+    vehicles: w.vehicles, zones: w.zones, truckDown: w.truckDown,
     objectives: w.objectives, stats: w.stats,
     escalated: w.escalated, bossSpawned: w.bossSpawned,
   });
@@ -212,6 +237,7 @@ export function restoreCheckpoint(w) {
   if (!w.checkpoint) return false;
   const c = structuredClone(w.checkpoint);
   w.enemies = c.enemies; w.civilians = c.civilians; w.pickups = c.pickups; w.props = c.props;
+  w.vehicles = c.vehicles ?? []; w.zones = c.zones ?? []; w.truckDown = c.truckDown ?? false;
   w.objectives = c.objectives; w.stats = c.stats;
   w.escalated = c.escalated; w.bossSpawned = c.bossSpawned;
   w.boss = w.enemies.find((e) => e.boss) ?? null;
@@ -219,7 +245,7 @@ export function restoreCheckpoint(w) {
   for (const snap of c.players) {
     const p = w.players.find((pp) => pp.slot === snap.slot);
     if (!p) continue;
-    Object.assign(p, { x: snap.x, y: snap.y, hp: Math.max(snap.hp, p.maxHp * 0.5), weapons: snap.weapons, weaponIdx: snap.weaponIdx, downed: false, reviveProgress: 0, cuffingId: null });
+    Object.assign(p, { x: snap.x, y: snap.y, hp: Math.max(snap.hp, p.maxHp * 0.5), weapons: snap.weapons, weaponIdx: snap.weaponIdx, downed: false, reviveProgress: 0, cuffingId: null, vehicleId: snap.vehicleId ?? null });
   }
   w.status = 'playing';
   return true;
@@ -234,9 +260,27 @@ export function updateWorld(w, dt, controlsBySlot) {
   for (const e of w.enemies) if (e.state === 'FIGHT' && e.hp > 0) { w.threat = 1; break; }
 
   for (const p of w.players) updatePlayer(w, p, dt, controlsBySlot[p.slot]);
+  updateVehicles(w, dt);
   for (const e of w.enemies) updateEnemy(w, e, dt);
   for (const c of w.civilians) updateCivilian(w, c, dt);
   updateBullets(w, dt);
+
+  // reach zones
+  for (const z of w.zones) {
+    if (z.done) continue;
+    if (w.players.some((p) => dist(p.x, p.y, z.x, z.y) < z.r)) {
+      z.done = true;
+      objEvent(w, { type: 'reached', tag: z.tag });
+      w.fx.log?.('Checkpoint gate reached');
+    }
+  }
+
+  // pursuit pressure: the shipment escaping ends the mission
+  const truck = w.vehicles.find((v) => v.tag === 'truck');
+  if (truck && !truck.disabled && truck.x > w.cols * TILE - 90) {
+    w.fx.banner?.('THE SHIPMENT GOT AWAY');
+    endMission(w, 'failed');
+  }
   w.effects = w.effects.filter((f) => (f.t += dt) < f.dur);
   w.props = w.props.filter((pr) => pr.hp > 0);
 
@@ -246,15 +290,26 @@ export function updateWorld(w, dt, controlsBySlot) {
   if (esc && !w.escalated && clearObj && clearObj.progress >= esc.at) {
     w.escalated = true;
     for (const s of esc.spawns) w.enemies.push(alertEnemy(makeEnemy(s.type, s.x * TILE + TILE / 2, s.y * TILE + TILE / 2, w)));
+    for (const vd of esc.vehicles ?? []) {
+      // reinforcement vehicles enter the pursuit from behind the player
+      const px = w.players[0]?.x ?? vd.x * TILE;
+      const laneY = vd.y * TILE + TILE / 2;
+      const v = makeVehicle(vd.type, Math.max(90, px - 560), laneY, { tag: vd.tag, ai: vd.ai, laneY, cruise: vd.cruise ?? 220 });
+      v.speed = v.cruise * 0.9;
+      w.vehicles.push(v);
+    }
     w.fx.banner?.(esc.banner); w.fx.alarm?.();
     saveCheckpoint(w);
   }
 
-  // Boss spawn once the crew objective is done
+  // Boss spawn: after the crew objective, or when the shipment truck is stopped
   const bossDef = w.mission.boss;
-  if (bossDef && !w.bossSpawned && clearObj?.done) {
+  const bossReady = bossDef?.trigger === 'truck' ? w.truckDown : clearObj?.done;
+  if (bossDef && !w.bossSpawned && bossReady) {
     w.bossSpawned = true;
-    const b = makeEnemy(bossDef.type, bossDef.x * TILE + TILE / 2, bossDef.y * TILE + TILE / 2, w);
+    const bx = bossDef.trigger === 'truck' && truck ? truck.x / TILE : bossDef.x;
+    const by = bossDef.trigger === 'truck' && truck ? truck.y / TILE : bossDef.y;
+    const b = makeEnemy(bossDef.type, bx * TILE + TILE / 2, by * TILE + TILE / 2, w);
     b.name = bossDef.name;
     w.boss = alertEnemy(b);
     w.enemies.push(b);
@@ -267,7 +322,7 @@ export function updateWorld(w, dt, controlsBySlot) {
     const b = w.boss, def = w.mission.boss;
     if (b.phase === 1 && b.hp / b.maxHp <= def.phase2At) {
       b.phase = 2; b.speed *= 1.35;
-      for (const s of def.phase2Spawns) w.enemies.push(alertEnemy(makeEnemy(s.type, s.x * TILE + TILE / 2, s.y * TILE + TILE / 2, w)));
+      for (const s of def.phase2Spawns ?? []) w.enemies.push(alertEnemy(makeEnemy(s.type, s.x * TILE + TILE / 2, s.y * TILE + TILE / 2, w)));
       w.fx.banner?.(def.phase2Banner);
     }
     const othersLeft = w.enemies.some((e) => !e.boss && (e.state === 'FIGHT' || e.state === 'IDLE' || e.state === 'FLEE'));
@@ -325,6 +380,31 @@ function updatePlayer(w, p, dt, c) {
   const upgrades = w.settings?.upgrades ?? {};
   const speed = p.agent.speed * (1 + (upgrades.mobility ?? 0) * 0.06);
 
+  // Driving: movement controls go to the vehicle; aiming and shooting stay live
+  if (p.vehicleId != null) {
+    const v = w.vehicles.find((x) => x.id === p.vehicleId);
+    if (!v) { p.vehicleId = null; }
+    else {
+      if (v.driverSlot === p.slot) {
+        const d = stepVehicle(v, { throttle: -c.moveY, steer: c.moveX, handbrake: c.dodge }, dt);
+        moveVehicle(w, v, d.dx, d.dy);
+      }
+      p.x = v.x; p.y = v.y;
+      aimPlayer(w, p, c);
+      firePlayer(w, p, c, { fromVehicle: v });
+      if (c.interact && justPressed(p, c, 'interact')) {
+        // step out beside the car
+        p.vehicleId = null;
+        if (v.driverSlot === p.slot) v.driverSlot = null;
+        p.x = v.x + Math.cos(v.angle + Math.PI / 2) * (v.r + 22);
+        p.y = v.y + Math.sin(v.angle + Math.PI / 2) * (v.r + 22);
+        w.fx.log?.(`${p.agent.name} dismounts`);
+      }
+      rememberPressed(p, c);
+      return;
+    }
+  }
+
   // Dodge
   if (p.dodgeTimer > 0) {
     p.dodgeTimer -= dt;
@@ -350,52 +430,15 @@ function updatePlayer(w, p, dt, c) {
     }
   }
 
-  // Aim (screen -> world through the camera zoom)
-  if (c.usesMouseAim) {
-    const wx = w.cam.x + (c.aimScreenX - w.viewW / 2) / ZOOM;
-    const wy = w.cam.y + (c.aimScreenY - w.viewH / 2) / ZOOM;
-    p.aimAngle = angleTo(p.x, p.y, wx, wy);
-  } else if (Math.hypot(c.aimDirX ?? 0, c.aimDirY ?? 0) > 0.01) {
-    p.aimAngle = Math.atan2(c.aimDirY, c.aimDirX);
-    if (w.settings?.aimAssist) p.aimAngle = assistAim(w, p, p.aimAngle);
-  }
-  p.aiming = !!c.aim;
+  aimPlayer(w, p, c);
 
   // Weapon swap
   if (c.swap && justPressed(p, c, 'swap')) {
     p.weaponIdx = (p.weaponIdx + 1) % p.weapons.length;
     w.fx.reloadSfx?.();
   }
-  const ws = p.weapons[p.weaponIdx];
-  const def = WEAPONS[ws.key];
-
-  // Reload — manual, plus auto-reload when firing on an empty mag
-  if (c.reload && justPressed(p, c, 'reload') && startReload(ws)) w.fx.reloadSfx?.();
-  if (c.fire && ws.ammo === 0 && ws.reloading <= 0 && startReload(ws)) w.fx.reloadSfx?.();
-
-  // Fire
-  if (c.fire && !def.melee && canFire(ws)) {
-    fire(ws);
-    w.stats.shotsFired += def.pellets ?? 1;
-    const spread = effectiveSpread(def, { moving: p.moving, stability: p.agent.stability + (upgrades.weapons ?? 0) * 0.03 });
-    for (let i = 0; i < (def.pellets ?? 1); i++) {
-      const a = p.aimAngle + (w.rng() - 0.5) * 2 * spread;
-      w.bullets.push({
-        x: p.x + Math.cos(a) * (R + 6), y: p.y + Math.sin(a) * (R + 6),
-        vx: Math.cos(a) * def.speed, vy: Math.sin(a) * def.speed,
-        weaponKey: ws.key, lethal: def.lethal, stun: def.stun ?? 0,
-        dmgBase: def.damage * (1 + (upgrades.weapons ?? 0) * 0.08),
-        ox: p.x, oy: p.y, fromPlayer: true, life: def.range / def.speed,
-        knockback: def.knockback,
-      });
-    }
-    w.fx.shot?.(ws.key, p.x, p.y);
-    w.cam.shake = Math.min(1, w.cam.shake + 0.15 * (w.settings?.screenShake ?? 1));
-    w.effects.push({ kind: 'muzzle', x: p.x + Math.cos(p.aimAngle) * (R + 10), y: p.y + Math.sin(p.aimAngle) * (R + 10), a: p.aimAngle, t: 0, dur: 0.06 });
-  } else if (c.fire && def.melee && canFire(ws)) {
-    fire(ws);
-    meleeSwing(w, p, def);
-  }
+  firePlayer(w, p, c, {});
+  const def = WEAPONS[p.weapons[p.weaponIdx].key];
 
   // Melee button always swings fists
   if (c.melee && p.meleeCd <= 0 && justPressed(p, c, 'melee')) {
@@ -423,6 +466,54 @@ function updatePlayer(w, p, dt, c) {
 function justPressed(p, c, key) { return c[key] && !p.prev[key]; }
 function rememberPressed(p, c) { p.prev = { ...c }; }
 
+function aimPlayer(w, p, c) {
+  if (c.usesMouseAim) {
+    const wx = w.cam.x + (c.aimScreenX - w.viewW / 2) / ZOOM;
+    const wy = w.cam.y + (c.aimScreenY - w.viewH / 2) / ZOOM;
+    p.aimAngle = angleTo(p.x, p.y, wx, wy);
+  } else if (Math.hypot(c.aimDirX ?? 0, c.aimDirY ?? 0) > 0.01) {
+    p.aimAngle = Math.atan2(c.aimDirY, c.aimDirX);
+    if (w.settings?.aimAssist) p.aimAngle = assistAim(w, p, p.aimAngle);
+  }
+  p.aiming = !!c.aim;
+}
+
+function firePlayer(w, p, c, { fromVehicle }) {
+  const upgrades = w.settings?.upgrades ?? {};
+  const ws = p.weapons[p.weaponIdx];
+  const def = WEAPONS[ws.key];
+
+  if (c.reload && justPressed(p, c, 'reload') && startReload(ws)) w.fx.reloadSfx?.();
+  if (c.fire && ws.ammo === 0 && ws.reloading <= 0 && startReload(ws)) w.fx.reloadSfx?.();
+
+  if (c.fire && !def.melee && canFire(ws)) {
+    fire(ws);
+    w.stats.shotsFired += def.pellets ?? 1;
+    const muzzleR = fromVehicle ? fromVehicle.r + 14 : R + 6;
+    const spread = effectiveSpread(def, {
+      moving: p.moving || (!!fromVehicle && Math.abs(fromVehicle.speed) > 60),
+      stability: p.agent.stability + (upgrades.weapons ?? 0) * 0.03,
+    });
+    for (let i = 0; i < (def.pellets ?? 1); i++) {
+      const a = p.aimAngle + (w.rng() - 0.5) * 2 * spread;
+      w.bullets.push({
+        x: p.x + Math.cos(a) * muzzleR, y: p.y + Math.sin(a) * muzzleR,
+        vx: Math.cos(a) * def.speed, vy: Math.sin(a) * def.speed,
+        weaponKey: ws.key, lethal: def.lethal, stun: def.stun ?? 0,
+        dmgBase: def.damage * (1 + (upgrades.weapons ?? 0) * 0.08),
+        ox: p.x, oy: p.y, fromPlayer: true, life: def.range / def.speed,
+        knockback: def.knockback, ignoreVehicleId: fromVehicle?.id ?? null,
+      });
+    }
+    w.fx.shot?.(ws.key, p.x, p.y);
+    w.cam.shake = Math.min(1, w.cam.shake + 0.15 * (w.settings?.screenShake ?? 1));
+    w.effects.push({ kind: 'muzzle', x: p.x + Math.cos(p.aimAngle) * (muzzleR + 4), y: p.y + Math.sin(p.aimAngle) * (muzzleR + 4), a: p.aimAngle, t: 0, dur: 0.06 });
+  } else if (c.fire && def.melee && canFire(ws) && !fromVehicle) {
+    fire(ws);
+    meleeSwing(w, p, def);
+  }
+}
+
 function assistAim(w, p, a) {
   let best = a, bd = 0.18; // ~10 degrees
   for (const e of w.enemies) {
@@ -448,6 +539,17 @@ function meleeSwing(w, p, def) {
 
 function handleInteract(w, p, dt, c) {
   if (!c.interact) { p.cuffingId = null; p.reviveProgress = 0; return; }
+
+  // board a nearby working vehicle (tap, not hold)
+  if (justPressed(p, c, 'interact')) {
+    const v = w.vehicles.find((x) => !x.disabled && !x.ai && dist(p.x, p.y, x.x, x.y) < x.r + 46);
+    if (v) {
+      p.vehicleId = v.id;
+      if (v.driverSlot == null) v.driverSlot = p.slot;
+      w.fx.log?.(`${p.agent.name} ${v.driverSlot === p.slot ? 'takes the wheel' : 'rides shotgun'}`);
+      return;
+    }
+  }
   const upgrades = w.settings?.upgrades ?? {};
   const cuffSpeed = p.agent.cuffSpeed * (1 + (upgrades.enforcement ?? 0) * 0.15);
 
@@ -619,6 +721,167 @@ function updateEnemy(w, e, dt) {
   if (e.ws.ammo === 0) startReload(e.ws);
 }
 
+// --- vehicles ---
+
+function moveVehicle(w, v, dx, dy) {
+  for (const [mx, my] of [[dx, 0], [0, dy]]) {
+    if (!mx && !my) continue;
+    const nx = v.x + mx, ny = v.y + my;
+    let blocked = solidAt(w, nx - v.r, ny) || solidAt(w, nx + v.r, ny) || solidAt(w, nx, ny - v.r) || solidAt(w, nx, ny + v.r);
+    if (!blocked) {
+      for (const pr of w.props) {
+        if (pr.solid && pr.hp > 0 && dist(nx, ny, pr.x, pr.y) < v.r + pr.r - 8) {
+          if (pr.kind !== 'barrier' && Math.abs(v.speed) > 140) { pr.hp = 0; w.stats.propertyDamage += 40; w.effects.push({ kind: 'break', x: pr.x, y: pr.y, t: 0, dur: 0.4 }); }
+          else blocked = true;
+          break;
+        }
+      }
+    }
+    if (blocked) {
+      const dmg = ramDamage(Math.abs(v.speed)) * 0.5;
+      if (damageVehicle(v, dmg) === 'disabled') onVehicleDisabled(w, v, v.driverSlot != null);
+      if (dmg > 0) { w.cam.shake = Math.min(1.2, w.cam.shake + 0.3); w.fx.hit?.(v.x, v.y); }
+      v.speed *= -0.25;
+    } else { v.x = nx; v.y = ny; }
+  }
+  // run down pedestrians (both factions get out of the way or get hurt)
+  if (Math.abs(v.speed) > 120) {
+    for (const t of [...w.enemies, ...w.civilians]) {
+      if (t.hp <= 0 || t.state === 'DEAD' || t.state === 'CUFFED') continue;
+      if (dist(v.x, v.y, t.x, t.y) < v.r + 10) {
+        hitEntity(w, t, ramDamage(Math.abs(v.speed)), { lethal: true, kx: Math.cos(v.angle) * 300, ky: Math.sin(v.angle) * 300, fromPlayer: v.driverSlot != null });
+      }
+    }
+  }
+}
+
+function updateVehicles(w, dt) {
+  const pv = w.vehicles.find((v) => v.driverSlot != null);
+  const truck = w.vehicles.find((v) => v.tag === 'truck');
+
+  for (const v of w.vehicles) {
+    v.hitFlash = Math.max(0, v.hitFlash - dt);
+    if (v.driverSlot != null) continue; // player-driven in updatePlayer
+    let c = { throttle: 0, steer: 0, handbrake: false };
+    if (!v.disabled && v.ai) {
+      const steerToLane = clamp((v.laneY - v.y) * 0.02, -0.8, 0.8);
+      const facingEast = Math.cos(v.angle) >= 0;
+      if (v.ai === 'convoy') {
+        c = { throttle: v.speed < v.cruise ? 0.8 : 0, steer: steerToLane - clamp(v.angle, -0.6, 0.6) * 0.8, handbrake: false };
+      } else if (v.ai === 'escort') {
+        // shield the truck; sideswipe the interceptor when it closes in
+        let targetY = v.laneY;
+        if (pv && Math.abs(pv.x - v.x) < 320) targetY = pv.y;
+        else if (truck) targetY = truck.laneY + (v.id % 2 ? 60 : -60);
+        c = { throttle: v.speed < v.cruise * 1.15 ? 0.9 : 0, steer: clamp((targetY - v.y) * 0.02, -1, 1) - clamp(v.angle, -0.7, 0.7), handbrake: false };
+        // drive-by fire at the player's car
+        v.shotTimer = (v.shotTimer ?? 1.5) - dt;
+        if (pv && v.shotTimer <= 0 && dist(v.x, v.y, pv.x, pv.y) < 420) {
+          v.shotTimer = 1.4 + w.rng();
+          const a = angleTo(v.x, v.y, pv.x, pv.y) + (w.rng() - 0.5) * 0.3;
+          w.bullets.push({
+            x: v.x + Math.cos(a) * (v.r + 12), y: v.y + Math.sin(a) * (v.r + 12),
+            vx: Math.cos(a) * 860, vy: Math.sin(a) * 860,
+            weaponKey: 'smg', lethal: true, stun: 0, dmgBase: WEAPONS.smg.damage * w.difficulty.enemyDmg * 0.55,
+            ox: v.x, oy: v.y, fromPlayer: false, life: 0.6, knockback: 10, ignoreVehicleId: v.id,
+          });
+          w.fx.shot?.('smg', v.x, v.y);
+        }
+      } else if (v.ai === 'traffic') {
+        const ahead = w.vehicles.find((o) => o !== v && Math.abs(o.y - v.y) < 30 && (facingEast ? o.x - v.x : v.x - o.x) > 0 && Math.abs(o.x - v.x) < 130);
+        c = { throttle: ahead ? -0.8 : (Math.abs(v.speed) < v.cruise ? 0.5 : 0), steer: steerToLane * (facingEast ? 1 : -1), handbrake: false };
+      }
+    }
+    const d = stepVehicle(v, c, dt);
+    moveVehicle(w, v, d.dx, d.dy);
+    // traffic despawn at the map ends
+    if (v.ai === 'traffic' && (v.x < 40 || v.x > w.cols * TILE - 40)) v.gone = true;
+  }
+  w.vehicles = w.vehicles.filter((v) => !v.gone);
+
+  // vehicle-vehicle collisions
+  for (let i = 0; i < w.vehicles.length; i++) {
+    for (let j = i + 1; j < w.vehicles.length; j++) {
+      const a = w.vehicles[i], b = w.vehicles[j];
+      const dd = dist(a.x, a.y, b.x, b.y);
+      if (dd >= a.r + b.r) continue;
+      const nx = (b.x - a.x) / (dd || 1), ny = (b.y - a.y) / (dd || 1);
+      const overlap = a.r + b.r - dd;
+      a.x -= nx * overlap / 2; a.y -= ny * overlap / 2;
+      b.x += nx * overlap / 2; b.y += ny * overlap / 2;
+      const rel = Math.abs(a.speed - b.speed) + 40;
+      const dmg = ramDamage(rel);
+      if (dmg > 0) {
+        w.fx.hit?.((a.x + b.x) / 2, (a.y + b.y) / 2);
+        if (a.driverSlot != null || b.driverSlot != null) w.cam.shake = Math.min(1.2, w.cam.shake + 0.35);
+        for (const [self, other] of [[a, b], [b, a]]) {
+          if (damageVehicle(self, dmg * (self.type === 'truck' ? 0.5 : 1)) === 'disabled') onVehicleDisabled(w, self, other.driverSlot != null);
+        }
+        const tmp = a.speed; a.speed = a.speed * 0.4 + b.speed * 0.4; b.speed = b.speed * 0.4 + tmp * 0.4;
+      }
+    }
+  }
+
+  // traffic spawner
+  const tdef = w.mission.traffic;
+  if (tdef) {
+    w.trafficTimer -= dt;
+    const count = w.vehicles.filter((v) => v.ai === 'traffic').length;
+    if (w.trafficTimer <= 0 && count < (tdef.max ?? 7)) {
+      w.trafficTimer = tdef.rate ?? 2.5;
+      const laneY = (w.rng.pick(tdef.rows)) * TILE + TILE / 2;
+      const eastbound = tdef.eastRows?.includes(Math.round((laneY - TILE / 2) / TILE)) ?? true;
+      const x = eastbound ? 60 : w.cols * TILE - 60;
+      const nearby = w.vehicles.some((v) => Math.abs(v.y - laneY) < 30 && Math.abs(v.x - x) < 240);
+      if (!nearby) {
+        const car = makeVehicle('sedan', x, laneY, { ai: 'traffic', laneY, cruise: 150 + w.rng() * 90 });
+        car.angle = eastbound ? 0 : Math.PI;
+        car.speed = car.cruise * 0.8;
+        w.vehicles.push(car);
+      }
+    }
+  }
+}
+
+function onVehicleDisabled(w, v, byPlayer) {
+  w.effects.push({ kind: 'break', x: v.x, y: v.y, t: 0, dur: 0.5 });
+  w.fx.explosion?.(v.x, v.y);
+  w.cam.shake = Math.min(1.3, w.cam.shake + 0.4);
+  if (v.ai === 'traffic') {
+    if (!v.harmed) {
+      v.harmed = true;
+      w.stats.civiliansHurt++;
+      objEvent(w, { type: 'civilianHurt' });
+      w.fx.log?.('A commuter was caught in the pursuit');
+    }
+  } else if (v.tag === 'escort') {
+    objEvent(w, { type: 'neutralized', tag: 'escort' });
+    w.fx.log?.('Escort runner disabled');
+    // the driver bails out, rattled and often ready to quit
+    const e = makeEnemy('lookout', v.x + 34, v.y, w);
+    e.hp = Math.round(e.maxHp * 0.6);
+    w.enemies.push(alertEnemy(e));
+    saveCheckpoint(w);
+  } else if (v.tag === 'truck') {
+    w.truckDown = true;
+    w.fx.banner?.('SHIPMENT STOPPED');
+    saveCheckpoint(w);
+  }
+  if (v.driverSlot != null) {
+    // spilled onto the asphalt
+    for (const p of w.players) {
+      if (p.vehicleId === v.id) {
+        p.vehicleId = null;
+        p.hitFlash = 0.12;
+        p.x = v.x + Math.cos(v.angle + Math.PI / 2) * (v.r + 24);
+        p.y = v.y + Math.sin(v.angle + Math.PI / 2) * (v.r + 24);
+      }
+    }
+    v.driverSlot = null;
+    w.fx.log?.('Your vehicle is wrecked');
+  }
+}
+
 function wander(w, e, dt, speed) {
   if (w.rng() < dt * 0.5) e.wanderA += (w.rng() - 0.5) * 2;
   moveCircle(w, e, Math.cos(e.wanderA) * speed * dt, Math.sin(e.wanderA) * speed * dt);
@@ -666,7 +929,20 @@ function updateBullets(w, dt) {
         }
       }
       if (consumed) break;
-      const targets = b.fromPlayer ? [...w.enemies, ...w.civilians] : [...w.players, ...w.civilians];
+      // vehicles soak bullets
+      for (const v of w.vehicles) {
+        if (v.id === b.ignoreVehicleId || v.disabled) continue;
+        if (dist(b.x, b.y, v.x, v.y) < v.r) {
+          if (b.fromPlayer) w.stats.shotsHit++;
+          const res = damageVehicle(v, scaledDamage(b) * 0.8);
+          w.effects.push({ kind: 'spark', x: b.x, y: b.y, t: 0, dur: 0.15 });
+          if (res === 'disabled') onVehicleDisabled(w, v, b.fromPlayer);
+          b.life = 0; consumed = true;
+          break;
+        }
+      }
+      if (consumed) break;
+      const targets = b.fromPlayer ? [...w.enemies, ...w.civilians] : [...w.players.filter((pp) => pp.vehicleId == null), ...w.civilians];
       for (const t of targets) {
         if (t.hp <= 0 || t.state === 'DEAD') continue;
         if (t.kind === 'player' && (t.iframes > 0 || t.downed)) continue;

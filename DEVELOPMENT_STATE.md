@@ -1,6 +1,30 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-14 (session 3, checkpoint 4)
+Updated: 2026-07-14 (session 4, checkpoint 5)
+
+## Session-4: vehicle system + m03 Highway Glow Run (browser-verified)
+- src/vehicles.js (pure, 7 unit tests): arcade physics — accel/brake/reverse,
+  speed-scaled steering, handbrake drifts, per-type stats (patrol interceptor,
+  gangcar, outrider bike, shipment truck, commuter sedan), ram damage,
+  disable-at-zero with roll-out.
+- World integration: enter/exit vehicles (E), driving controls with drive-by
+  shooting from the window, wall/prop/vehicle collisions with ram damage and
+  prop crushing, pedestrians run down at speed, AI drivers (convoy cruising,
+  escorts that shield the truck / sideswipe / drive-by fire, lane-keeping
+  traffic with braking), traffic spawner with caps, reach zones ('X'),
+  escalation vehicle waves, median barriers ('='), truck-escape mission fail,
+  boss triggered by stopping the truck (spawns at the wreck), wrecked player
+  car ejects the driver and the mission continues on foot.
+- Render: vehicle art (bodies, wheels, cargo box with GLOW⁰ branding, flashing
+  patrol lightbar — steady when Reduce Flashing is on, head/taillights, damage
+  smoke, hp pips, SHIPMENT tag), jersey barriers, interchange-gate ring,
+  headlight pools in the lighting layer. HUD shows vehicle % while driving.
+- m03: 128-tile expressway (map built programmatically), 3 escort runners +
+  truck convoy, outrider escalation, boss TREAD (arrestable). E2E: escorts
+  disabled by drive-by, truck stopped, TREAD ARRESTED, 0 commuters harmed,
+  grade A. 59 tests green. Draw cost measured 4–6 ms/frame with full pursuit.
+- Known tooling flake: Browser-pane screenshots timed out at session end while
+  the page itself stayed responsive (JS + draw verified) — retry next session.
 
 ## Session-3: m02 Club Neon Raid + upgrade screen (browser-verified)
 - MISSIONS.m02: nightclub interior (dance floor 'd' tiles, bar, VIP rooms,
@@ -92,11 +116,12 @@ Updated: 2026-07-14 (session 3, checkpoint 4)
   placeholder maps — track them here.
 
 ## Exact next task
-Session 4: m03 Highway Glow Run — first vehicle mission (Phase 4 pull-forward:
-patrol car driving model, pursuit AI, traffic, passenger shooting), then m04
-Warehouse Intercept to close Act 1. Backlog: mystery of 1 stray `kill` in the
-m02 melee-only harness run (possibly flee-escape accounting) — check
-neutralize/flee bookkeeping before building m03.
+Session 5: m04 Warehouse Intercept (Act 1 finale — CHROME DOG returns
+escalated, or new boss; big destructible interior; mixed on-foot arrival by
+car), then Act 1 complete. Backlog: (1) stray-kill bookkeeping in melee-only
+runs (suspect: run-downs by AI cars or flee-escape edge), (2) move the
+mid-file VEHICLE_TYPES import in render.js to the header, (3) retry pane
+screenshots.
 
 ## Commands required to resume
 ```
