@@ -580,9 +580,18 @@ function updateEnemy(w, e, dt) {
   moveCircle(w, e, (mx / ml) * e.speed * dt * w.difficulty.aggro, (my / ml) * e.speed * dt * w.difficulty.aggro);
   e.aimAngle = a;
 
-  // shoot — enemies fire in a measured cadence, not at player trigger speed
+  // shoot — enemies fire in a measured cadence, not at player trigger speed,
+  // and hold fire when a civilian is standing in the lane (no "oops" kills)
   e.shotTimer -= dt;
-  if (los && canFire(e.ws) && e.shotTimer <= 0) {
+  const laneBlocked = los && w.civilians.some((cv) => {
+    if (cv.state === 'DEAD') return false;
+    const cd = dist(e.x, e.y, cv.x, cv.y);
+    if (cd >= d) return false; // civilian is behind the player
+    const ca = angleTo(e.x, e.y, cv.x, cv.y);
+    const pa = angleTo(e.x, e.y, player.x, player.y);
+    return Math.abs(((ca - pa + Math.PI) % TAU) - Math.PI) < Math.atan2(20, cd);
+  });
+  if (los && !laneBlocked && canFire(e.ws) && e.shotTimer <= 0) {
     const def = WEAPONS[e.ws.key];
     e.shotTimer = Math.max(1.1, 2.2 / def.rof) * (0.8 + w.rng() * 0.5) / w.difficulty.aggro;
     if (!def.melee && d < def.range) {

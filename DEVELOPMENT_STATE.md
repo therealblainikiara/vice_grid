@@ -1,6 +1,26 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-14 (session 2, checkpoint 3)
+Updated: 2026-07-14 (session 3, checkpoint 4)
+
+## Session-3: m02 Club Neon Raid + upgrade screen (browser-verified)
+- MISSIONS.m02: nightclub interior (dance floor 'd' tiles, bar, VIP rooms,
+  back office, street entrance), 9-strong crew incl. new enemy types
+  `bouncer` (melee baton, hard) and `vipguard` (smg, sly); escalation
+  "BOUNCERS OFF THE CHAIN"; boss MIDNIGHT (smg, 2 phases, surrenders at 20%).
+  E2E: won with 13 arrests, MIDNIGHT arrested, grade B; crowd-safe optional
+  survivable (1-strike allowance).
+- Upgrade/respec screen between missions: src/upgrades.js (pure, 4 unit
+  tests), ui.showUpgrade + screen-upgrade section, flow results → upgrade →
+  briefing; buys/refunds/respec persist to slot 0. Verified programmatically
+  AND by live human play (user purchased Weapons ×2 mid-session).
+- tests/missions.test.js: campaign validation (map rectangular + sealed
+  borders, spawn/objective consistency, boss + escalation spawn sanity) runs
+  against every `implemented` mission. Suite now 51 tests, all green.
+- AI fix: enemies hold fire when a civilian is in the firing lane ("avoid
+  obvious friendly fire") — 60 s idle soak in the packed club: 0 civilians
+  harmed (was 2 in under a minute).
+- Debug API: __vg.tick(seconds, doDraw=false) for fast headless stepping;
+  __vg.skipToPlay(agent, missionId).
 
 ## Session-2: graphics overhaul (verified in browser)
 - render.js rewritten as a neon-noir 2.5D renderer: per-mission baked
@@ -72,10 +92,11 @@ Updated: 2026-07-14 (session 2, checkpoint 3)
   placeholder maps — track them here.
 
 ## Exact next task
-Session 2: build m02 Club Neon Raid (interior map, hostage rooms, 'reach'
-objective) + the upgrade/respec screen between missions (data model exists in
-campaign.upgrades / upgradePoints). Then m03 Highway Glow Run begins the
-vehicle system (Phase 4 pull-forward).
+Session 4: m03 Highway Glow Run — first vehicle mission (Phase 4 pull-forward:
+patrol car driving model, pursuit AI, traffic, passenger shooting), then m04
+Warehouse Intercept to close Act 1. Backlog: mystery of 1 stray `kill` in the
+m02 melee-only harness run (possibly flee-escape accounting) — check
+neutralize/flee bookkeeping before building m03.
 
 ## Commands required to resume
 ```

@@ -8,6 +8,7 @@ import { draw } from './render.js';
 import { gradeMission } from './grading.js';
 import { MISSIONS, CAMPAIGN, AGENTS } from './missions.js';
 import { makeSaveStore, newCampaign, loadSettings, saveSettings } from './save.js';
+import { buyUpgrade, refundUpgrade, respec } from './upgrades.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -148,8 +149,20 @@ on('btn-retry', () => { restoreCheckpoint(world); state = 'play'; ui.show(null);
 on('btn-next', () => {
   const mains = CAMPAIGN.filter((m) => m.type === 'main');
   if (campaign.missionIndex >= mains.length) { state = 'credits'; ui.show('credits'); }
-  else startMission(currentMissionId());
+  else showUpgradeScreen();
 });
+function showUpgradeScreen() {
+  state = 'upgrade';
+  ui.showUpgrade(campaign, (key, isBuy) => {
+    if ((isBuy ? buyUpgrade : refundUpgrade)(campaign, key)) {
+      audio.uiConfirm();
+      store.save(0, campaign);
+    }
+    showUpgradeScreen(); // re-render the panel from campaign state
+  });
+}
+on('btn-upgrade-respec', () => { respec(campaign); store.save(0, campaign); showUpgradeScreen(); });
+on('btn-upgrade-continue', () => startMission(currentMissionId()));
 on('btn-results-menu', toMenu);
 on('btn-settings-back', () => {
   persistSettings();
@@ -181,19 +194,21 @@ window.__vg = {
   get world() { return world; },
   get campaign() { return campaign; },
   settings,
-  skipToPlay(agent = 'rhino') {
+  skipToPlay(agent = 'rhino', missionId = 'm01') {
     campaign = campaign ?? newCampaign(agent);
-    world = createWorld(MISSIONS.m01, { agentKey: agent, settings: { ...settings, upgrades: campaign.upgrades }, fx });
+    world = createWorld(MISSIONS[missionId], { agentKey: agent, settings: { ...settings, upgrades: campaign.upgrades }, fx });
     state = 'play'; ui.show(null);
   },
   // Deterministically step the sim (used by the campaign validation tool and
   // when the tab is hidden, where requestAnimationFrame is suspended).
-  tick(seconds = 1 / 60) {
+  tick(seconds = 1 / 60, doDraw = true) {
     if (!world || state !== 'play') return;
     const controls = { 0: input.readControls(0), 1: input.readControls(1) };
     for (let t = 0; t < seconds - 1e-9; t += STEP) updateWorld(world, STEP, controls);
-    ui.updateHud(world, true);
-    draw(ctx, world, settings);
+    if (doDraw) {
+      ui.updateHud(world, true);
+      draw(ctx, world, settings);
+    }
     if (world.status !== 'playing' && world.endTimer > 1.6) finishMission(world.status === 'success');
   },
 };

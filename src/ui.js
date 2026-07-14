@@ -3,11 +3,12 @@
 import { WEAPONS } from './combat.js';
 import { SCORE } from './grading.js';
 import { summary } from './objectives.js';
+import { UPGRADE_DEFS } from './upgrades.js';
 
 const $ = (id) => document.getElementById(id);
 
 export function makeUI(settings, audio) {
-  const screens = ['title', 'menu', 'agent', 'briefing', 'pause', 'results', 'settings', 'credits'];
+  const screens = ['title', 'menu', 'agent', 'briefing', 'pause', 'results', 'settings', 'credits', 'upgrade'];
   let bannerTimer = null, subtitleTimer = null;
 
   function show(name) {
@@ -161,7 +162,29 @@ export function makeUI(settings, audio) {
     });
   }
 
-  return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults, buildSettingsPanel, liveScore };
+  // Upgrade / respec screen. onAdjust(key, isBuy) mutates the campaign and
+  // re-calls this; the whole panel re-renders from campaign state.
+  function showUpgrade(campaign, onAdjust) {
+    $('upgrade-points').textContent = campaign.upgradePoints;
+    $('upgrade-body').innerHTML = Object.entries(UPGRADE_DEFS).map(([k, d]) => {
+      const lvl = campaign.upgrades[k] ?? 0;
+      const dots = Array.from({ length: d.max }, (_, i) => `<span class="dot ${i < lvl ? 'on' : ''}"></span>`).join('');
+      return `<div class="uprow">
+        <div class="upinfo"><b>${d.name}</b><small>${d.desc}</small></div>
+        <div class="upctl">
+          <button data-dn="${k}" ${lvl <= 0 ? 'disabled' : ''} aria-label="Refund ${d.name}">−</button>
+          <span class="dots">${dots}</span>
+          <button data-up="${k}" ${lvl >= d.max || campaign.upgradePoints < 1 ? 'disabled' : ''} aria-label="Buy ${d.name}">+</button>
+        </div>
+      </div>`;
+    }).join('');
+    $('upgrade-body').querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => onAdjust(b.dataset.up ?? b.dataset.dn, !!b.dataset.up));
+    });
+    show('upgrade');
+  }
+
+  return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults, buildSettingsPanel, showUpgrade, liveScore };
 }
 
 function escapeHtml(s) {

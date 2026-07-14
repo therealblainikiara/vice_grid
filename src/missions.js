@@ -25,15 +25,18 @@ export const ENEMY_TYPES = {
   soldier:  { hp: 60,  speed: 140, weapon: 'pistol',  personality: 'timid',  color: '#6dff3a', score: 'gunman' },
   dealer:   { hp: 55,  speed: 150, weapon: 'smg',     personality: 'sly',    color: '#4be82f', score: 'gunman' },
   bruiser:  { hp: 110, speed: 115, weapon: 'shotgun', personality: 'hard',   color: '#2fbf2f', score: 'gunman', armor: 0.15 },
+  bouncer:  { hp: 95,  speed: 185, weapon: 'baton',   personality: 'hard',   color: '#3fe8a0', score: 'gunman', armor: 0.1 },
+  vipguard: { hp: 70,  speed: 150, weapon: 'smg',     personality: 'sly',    color: '#57ffce', score: 'gunman' },
   // Bosses
   chromedog:{ hp: 420, speed: 130, weapon: 'shotgun', personality: 'hard',   color: '#c8ff2f', score: 'boss', armor: 0.3, boss: true },
+  midnight: { hp: 300, speed: 165, weapon: 'smg',     personality: 'sly',    color: '#b06cff', score: 'boss', armor: 0.2, boss: true },
 };
 
 // Full campaign skeleton. `implemented` gates mission select during development;
 // the release build requires every entry to be true (validated by tools/validate.js).
 export const CAMPAIGN = [
   { id: 'm01', act: 1, n: 1, title: 'Store Siege', type: 'main', implemented: true },
-  { id: 'm02', act: 1, n: 2, title: 'Club Neon Raid', type: 'main', implemented: false },
+  { id: 'm02', act: 1, n: 2, title: 'Club Neon Raid', type: 'main', implemented: true },
   { id: 'm03', act: 1, n: 3, title: 'Highway Glow Run', type: 'main', implemented: false },
   { id: 'm04', act: 1, n: 4, title: 'Warehouse Intercept', type: 'main', implemented: false },
   { id: 'op1', act: 1, n: 0, title: 'OP: Corner Sweep', type: 'op', implemented: false },
@@ -124,6 +127,71 @@ export const MISSIONS = {
       '############################',
     ],
   },
+};
+
+MISSIONS.m02 = {
+  id: 'm02',
+  title: 'M02 — CLUB NEON RAID',
+  parSec: 480,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The QuickCell ledger points at Club Neon — Glowline launders GLOW money through the bar and sells product out of the VIP rooms.',
+      'The middleman runs the place from the back office. Calls himself MIDNIGHT. Smooth type. Do not trust his hands when they go up.',
+      'The club is packed with civilians on the dance floor. Watch your lanes and your muzzle.',
+      'Two evidence targets: the blackmail drive in the office, and the counting-room cash in VIP. Bring me both and Act One cracks open.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Club Neon is dark and the music is finally off. The crowd walked out on their own feet.',
+      'MIDNIGHT\'s books point upstream — a shipment coming in hot on the expressway. Get some sleep in the car.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The club swallowed you. Reset, breathe, and hit it again — quieter this time.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize the club crew', primary: true, type: 'neutralize', count: 9, tag: 'gunman' },
+    { id: 'boss', label: 'Take down MIDNIGHT', primary: true, type: 'boss' },
+    { id: 'cuffs', label: 'Optional: Arrest 4 suspects', primary: false, type: 'arrest', count: 4 },
+    { id: 'civs', label: 'Optional: Keep the crowd safe (1 strike allowed)', primary: false, type: 'protect', count: 1 },
+    { id: 'ledger', label: 'Optional: Seize the drive + the counting-room cash', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'BOUNCERS OFF THE CHAIN',
+    spawns: [
+      { type: 'bouncer', x: 5, y: 14 }, { type: 'bouncer', x: 6, y: 14 },
+      { type: 'bouncer', x: 24, y: 14 }, { type: 'bouncer', x: 23, y: 14 },
+    ],
+  },
+  boss: {
+    type: 'midnight', x: 15, y: 2, name: 'MIDNIGHT',
+    intro: 'MIDNIGHT: "Badges in my club. Somebody queue the last song."',
+    phase2At: 0.5, phase2Banner: 'MIDNIGHT CALLS THE FLOOR',
+    phase2Spawns: [{ type: 'bouncer', x: 5, y: 13 }, { type: 'vipguard', x: 24, y: 13 }],
+    surrenderAt: 0.2,
+  },
+  map: [
+    '##############################',
+    '#..E......#....V.....#....E..#',
+    '#.c....m..#..........#..w....#',
+    '#.....E...#....E.....#..E....#',
+    '####.######...###.####....####',
+    '#..s.s.s..................C..#',
+    '#..C......ddddddddd..........#',
+    '#.E.......ddddddddd......E...#',
+    '#..s.s.s..ddCddCddd..........#',
+    '#.........ddddddddd....####.##',
+    '#..C.E....ddddddddd....#.V...#',
+    '#..s.s.s..................E..#',
+    '#.........C.....C....p.#.....#',
+    '#####.##################.#####',
+    '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+    '#,,P,,,,,,,,,,,,,,,,,,,,,C,,,#',
+    '#~~~~~~~~~~~~~~~~~~~~~~~~~~~~#',
+    '##############################',
+  ],
 };
 
 // Ops and later missions reuse this framework; each definition slots into

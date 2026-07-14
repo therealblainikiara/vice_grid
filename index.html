@@ -64,6 +64,13 @@
   #results-stats td:last-child { text-align: right; color: var(--gold); }
   .setting { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 6px 0; border-top: 1px solid rgba(255,255,255,.07); }
   .setting span { font-size: .9rem; }
+  .uprow { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,.07); }
+  .upinfo small { display: block; color: #8ea0b5; margin-top: 2px; }
+  .upctl { display: flex; align-items: center; gap: 10px; }
+  .upctl button { min-width: 38px; padding: 5px 0; font-size: 1.05rem; }
+  .dots { display: flex; gap: 5px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.14); }
+  .dot.on { background: var(--gold); box-shadow: 0 0 8px rgba(255,217,79,.7); }
 
   /* HUD */
   #hud { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 3; }
@@ -173,6 +180,14 @@
     <button id="btn-next">Next mission</button>
     <button id="btn-retry">Retry from checkpoint</button>
     <button id="btn-results-menu">Main menu</button>
+  </section>
+
+  <section class="screen" id="screen-upgrade">
+    <h2>Field Upgrades</h2>
+    <div class="hint">Points available: <b id="upgrade-points" style="color:var(--gold)">0</b> — respec is free between missions</div>
+    <div class="panel" id="upgrade-body"></div>
+    <button id="btn-upgrade-respec">Respec (refund everything)</button>
+    <button id="btn-upgrade-continue">Continue to briefing</button>
   </section>
 
   <section class="screen" id="screen-settings">

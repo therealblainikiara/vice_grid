@@ -89,6 +89,36 @@ export function draw(ctx, w, settings) {
   // 7) effects
   for (const f of w.effects) drawEffect(ctx, f, settings, fx);
 
+  // intelligence upgrades: evidence compass (Lv1+) and suspect nerve (Lv3+)
+  const intel = w.settings?.upgrades?.intelligence ?? 0;
+  if (intel >= 1) {
+    for (const p of w.players) {
+      if (p.downed) continue;
+      let best = null, bd = Infinity;
+      for (const pk of w.pickups) {
+        if (pk.kind !== 'evidence') continue;
+        const d = Math.hypot(pk.x - p.x, pk.y - p.y);
+        if (d < bd) { bd = d; best = pk; }
+      }
+      if (best && bd > 90) {
+        const a = Math.atan2(best.y - p.y, best.x - p.x);
+        const pulse = 0.5 + 0.4 * Math.sin(now / 240);
+        ctx.save();
+        ctx.translate(p.x + Math.cos(a) * 30, p.y + Math.sin(a) * 30);
+        ctx.rotate(a);
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = '#ffd94f';
+        ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-4, -5); ctx.lineTo(-4, 5); ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+  if (intel >= 3) {
+    for (const e of w.enemies) {
+      if (e.state === 'FIGHT' && e.hp > 0 && e.hp < e.maxHp * 0.45) tag(ctx, 'SHAKEN', e.x, e.y - 34, '#ffd94f');
+    }
+  }
+
   ctx.restore();
 
   // 8) lighting: ambient darkness with light pools cut out
@@ -209,6 +239,22 @@ function bakeStatic(w) {
           g.beginPath(); g.arc(px + TILE / 2, py + TILE / 2, 9, 0, Math.PI * 2); g.fill();
           g.strokeStyle = '#0a0d14';
           g.stroke();
+        }
+      } else if (rowChar(w, tx, ty) === 'd') {
+        // dance floor: glossy colour-cycled panels
+        const pal = ['#2a1638', '#16283a', '#1f1330', '#301a2c'];
+        g.fillStyle = pal[(tx + ty * 2) % pal.length];
+        g.fillRect(px, py, TILE, TILE);
+        g.strokeStyle = 'rgba(255,255,255,0.07)';
+        g.lineWidth = 1;
+        g.strokeRect(px + 1, py + 1, TILE - 2, TILE - 2);
+        const dg = g.createLinearGradient(px, py, px + TILE, py + TILE);
+        dg.addColorStop(0, hexA(NEON[(tx + ty) % NEON.length], 0.10));
+        dg.addColorStop(1, 'transparent');
+        g.fillStyle = dg;
+        g.fillRect(px, py, TILE, TILE);
+        if (hash(tx, ty, 40) > 0.8) {
+          cache.lights.push({ kind: 'dance', x: px + TILE / 2, y: py + TILE / 2, r: 90, color: NEON[(hash(tx, ty, 41) * NEON.length) | 0] });
         }
       } else if (rowChar(w, tx, ty) === ',') {
         // sidewalk slabs
@@ -383,7 +429,10 @@ function styleFor(e, settings) {
     soldier: { outfit: '#324a2e', size: 1.0, head: 'bare' },
     dealer: { outfit: '#27452f', size: 1.0, head: 'cap' },
     bruiser: { outfit: '#2c4030', size: 1.22, head: 'bare', bulky: true },
+    bouncer: { outfit: '#1f3a33', size: 1.18, head: 'bare', bulky: true },
+    vipguard: { outfit: '#274044', size: 1.0, head: 'cap' },
     chromedog: { outfit: '#3a4a24', size: 1.42, head: 'chrome', bulky: true },
+    midnight: { outfit: '#2c1f45', size: 1.24, head: 'cap' },
   }[e.type] ?? { outfit: '#324a2e', size: 1, head: 'bare' };
   return {
     ...base,
