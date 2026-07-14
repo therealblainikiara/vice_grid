@@ -5,6 +5,7 @@
 
 import { TILE, ZOOM } from './world.js';
 import { WEAPONS } from './combat.js';
+import { VEHICLE_TYPES } from './vehicles.js';
 
 // deterministic per-tile hash for decor variation
 function hash(x, y, s = 0) {
@@ -454,6 +455,8 @@ function styleFor(e, settings) {
     vipguard: { outfit: '#274044', size: 1.0, head: 'cap' },
     chromedog: { outfit: '#3a4a24', size: 1.42, head: 'chrome', bulky: true },
     midnight: { outfit: '#2c1f45', size: 1.24, head: 'cap' },
+    tread: { outfit: '#4a3520', size: 1.3, head: 'cap', bulky: true },
+    stacks: { outfit: '#4a4224', size: 1.5, head: 'bare', bulky: true },
   }[e.type] ?? { outfit: '#324a2e', size: 1, head: 'bare' };
   return {
     ...base,
@@ -794,8 +797,6 @@ function drawPickup(ctx, pk, now, fx) {
 }
 
 // ---------------------------------------------------------------- vehicles
-
-import { VEHICLE_TYPES } from './vehicles.js';
 
 function drawVehicle(ctx, v, settings, fx, now) {
   const t = VEHICLE_TYPES[v.type];

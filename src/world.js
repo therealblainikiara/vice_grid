@@ -61,6 +61,7 @@ export function createWorld(mission, opts) {
         case 'V': w.pickups.push({ id: id(), kind: 'evidence', x, y }); w.stats.evidenceTotal++; break;
         case 'w': w.pickups.push({ id: id(), kind: 'weapon', weaponKey: rng.chance(0.5) ? 'shotgun' : 'smg', x, y }); break;
         case 'p': w.pickups.push({ id: id(), kind: 'weapon', weaponKey: 'beanbag', x, y }); break;
+        case 'S': w.pickups.push({ id: id(), kind: 'weapon', weaponKey: 'stormcaster', x, y }); break;
         case 'm': w.pickups.push({ id: id(), kind: 'medkit', x, y }); break;
         case '=': w.props.push({ id: id(), kind: 'barrier', x, y, hp: Infinity, solid: true, r: 20 }); break;
         case 'X': w.zones.push({ x, y, r: 80, tag: 'gate', done: false }); break;
@@ -360,6 +361,11 @@ export function updateWorld(w, dt, controlsBySlot) {
 
 function endMission(w, status) {
   if (w.status !== 'playing') return;
+  if (status === 'success') {
+    // surviving a protect objective is completing it
+    for (const o of w.objectives) if (o.type === 'protect' && !o.failed) o.done = true;
+    w.stats.optionalDone = w.objectives.filter((o) => !o.primary && o.done).length;
+  }
   w.status = status;
   w.endTimer = 0;
 }

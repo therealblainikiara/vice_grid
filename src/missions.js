@@ -31,6 +31,7 @@ export const ENEMY_TYPES = {
   chromedog:{ hp: 420, speed: 130, weapon: 'shotgun', personality: 'hard',   color: '#c8ff2f', score: 'boss', armor: 0.3, boss: true },
   midnight: { hp: 300, speed: 165, weapon: 'smg',     personality: 'sly',    color: '#b06cff', score: 'boss', armor: 0.2, boss: true },
   tread:    { hp: 380, speed: 145, weapon: 'shotgun', personality: 'hard',   color: '#ffb04f', score: 'boss', armor: 0.25, boss: true },
+  stacks:   { hp: 520, speed: 120, weapon: 'stormcaster', personality: 'hard', color: '#ffd94f', score: 'boss', armor: 0.35, boss: true },
 };
 
 // Full campaign skeleton. `implemented` gates mission select during development;
@@ -39,7 +40,7 @@ export const CAMPAIGN = [
   { id: 'm01', act: 1, n: 1, title: 'Store Siege', type: 'main', implemented: true },
   { id: 'm02', act: 1, n: 2, title: 'Club Neon Raid', type: 'main', implemented: true },
   { id: 'm03', act: 1, n: 3, title: 'Highway Glow Run', type: 'main', implemented: true },
-  { id: 'm04', act: 1, n: 4, title: 'Warehouse Intercept', type: 'main', implemented: false },
+  { id: 'm04', act: 1, n: 4, title: 'Warehouse Intercept', type: 'main', implemented: true },
   { id: 'op1', act: 1, n: 0, title: 'OP: Corner Sweep', type: 'op', implemented: false },
   { id: 'op2', act: 1, n: 0, title: 'OP: Glow Courier', type: 'op', implemented: false },
   { id: 'm05', act: 2, n: 5, title: 'Port of Cobalt', type: 'main', implemented: false },
@@ -276,6 +277,72 @@ MISSIONS.m03 = {
     hwRow(','),
     hwRow(',', (x) => (x % 23 === 0 ? 'c' : ',')),
     hwRow('#'),
+  ],
+};
+
+MISSIONS.m04 = {
+  id: 'm04',
+  title: 'M04 — WAREHOUSE INTERCEPT',
+  parSec: 540,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'TREAD\'s hauler was bound for Pier 9 — a bonded warehouse Glowline runs as their Act One counting house.',
+      'Everything they salvaged this week is inside: product, cash, and the shipping ledger that maps the whole network upstream.',
+      'The floor chief calls himself BIG STACKS. He inherited an experimental Halcyon riot gun. Do not stand in front of it.',
+      'Dock workers are still on shift. Clear the floor, keep them breathing, and close out Act One properly: with names on warrants.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Pier 9 is ours. The shipping ledger names the Port of Cobalt intake crew — that is Act Two, Grid.',
+      'Whatever Halcyon is doing selling riot guns to dealers, we now have one in an evidence bag.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The counting house held. Regroup and take the pier back.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize the warehouse crew', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
+    { id: 'boss', label: 'Take down BIG STACKS', primary: true, type: 'boss' },
+    { id: 'cuffs', label: 'Optional: Arrest 4 suspects', primary: false, type: 'arrest', count: 4 },
+    { id: 'civs', label: 'Optional: No dock workers harmed', primary: false, type: 'protect', count: 0 },
+    { id: 'ledger', label: 'Optional: Seize the ledger + the cash pallet', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'GLOWLINE VAN CRASHES THE DOCK',
+    spawns: [
+      { type: 'bruiser', x: 3, y: 16 }, { type: 'dealer', x: 4, y: 16 },
+      { type: 'soldier', x: 30, y: 16 }, { type: 'dealer', x: 29, y: 16 },
+    ],
+  },
+  boss: {
+    type: 'stacks', x: 17, y: 3, name: 'BIG STACKS',
+    intro: 'BIG STACKS: "You know how much inventory you just cost me? I\'m taking it out of your hide."',
+    phase2At: 0.5, phase2Banner: 'BIG STACKS BURIES THE AISLES',
+    phase2Spawns: [{ type: 'bruiser', x: 14, y: 5 }, { type: 'bruiser', x: 20, y: 5 }],
+    surrenderAt: 0.12,
+  },
+  map: [
+    '##################################',
+    '#..V......#............#....m....#',
+    '#..c.c....#..E......E..#..c.c.E..#',
+    '#.....E...#............#.........#',
+    '#####.##########..##########.####'.padEnd(34, '#'),
+    '#........................E.......#',
+    '#..c.c.c.c..E...c.c.c.c......C...#',
+    '#................................#',
+    '#..c.c.c.c....E.c.c.c.c...E...S..#',
+    '#.....E..........................#',
+    '#..c.c.c.c......c.c.c.c..E.......#',
+    '#...C............................#',
+    '#..c.c.c.c..E...c.c.c.c......V...#',
+    '#............C...................#',
+    '####.#####################.######'.padEnd(34, '#'),
+    '#' + ','.repeat(32) + '#',
+    '#,,P,,,,,,,,C,,,,,,,,,,,,,,,w,,,,#',
+    '#' + '~'.repeat(32) + '#',
+    '##################################',
   ],
 };
 

@@ -44,7 +44,7 @@ available but drags the mission grade and shifts dialogue/endings.
 
 ## Campaign — 4 acts, 16 mains, 8 ops, 6+ bosses, 3+ endings
 
-- ACT 1 STREET LEVEL: M01 Store Siege · M02 Club Neon Raid · M03 Highway Glow Run · M04 Warehouse Intercept (Boss: CHROME DOG)
+- ACT 1 STREET LEVEL: M01 Store Siege (Boss: CHROME DOG) · M02 Club Neon Raid (Boss: MIDNIGHT) · M03 Highway Glow Run (Boss: TREAD) · M04 Warehouse Intercept (Boss: BIG STACKS)
 - ACT 2 THE NETWORK: M05 Port of Cobalt · M06 Tower Block Evac · M07 Convoy Takedown · M08 The Glow Kitchen (Boss: THE CHEMIST)
 - ACT 3 THE CITY FIGHTS BACK: M09 Precinct Siege · M10 Evidence Run · M11 Blackout · M12 Signal Tower (Bosses: CAPTAIN GRAFT, STATIC CHOIR)
 - ACT 4 THE SOURCE: M13 The Rig · M14 Halcyon HQ · M15 City on Fire · M16 The Penthouse Grid (Bosses: DR. HALO, MOTHER STATIC)

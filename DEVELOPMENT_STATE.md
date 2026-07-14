@@ -1,6 +1,21 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-14 (session 4, checkpoint 5)
+Updated: 2026-07-14 (session 5, checkpoint 6) — ACT 1 COMPLETE (m01–m04)
+
+## Session-5: m04 Warehouse Intercept closes Act 1 (browser-verified)
+- MISSIONS.m04: Pier 9 bonded warehouse — crate-maze hall, storage rooms,
+  office with ledger evidence, dock street; 10-strong crew; van escalation;
+  boss BIG STACKS (Halcyon Stormcaster power weapon, phase 2 buries the
+  aisles, surrenders only at 12%). Map char 'S' = Stormcaster pickup.
+- E2E: Stormcaster pickup verified; 16 arrests / 0 kills; BIG STACKS
+  ARRESTED; 0 dock workers harmed; grade A. Campaign now plays m01→m04
+  through the real flow. 60 tests green (validation suite caught 2 real m04
+  bugs pre-browser: ragged map rows, phase-2 spawns inside a wall).
+- Grading fix: un-failed protect objectives now count as done on success
+  (they previously always read incomplete and dragged the optional score).
+- Backlog cleared: render.js vehicle import moved to header; pane screenshots
+  work again (transient tool flake); stray-kill mystery attributed to live
+  user input during shared-page harness runs (m04 run was 0-kill clean).
 
 ## Session-4: vehicle system + m03 Highway Glow Run (browser-verified)
 - src/vehicles.js (pure, 7 unit tests): arcade physics — accel/brake/reverse,
@@ -116,12 +131,12 @@ Updated: 2026-07-14 (session 4, checkpoint 5)
   placeholder maps — track them here.
 
 ## Exact next task
-Session 5: m04 Warehouse Intercept (Act 1 finale — CHROME DOG returns
-escalated, or new boss; big destructible interior; mixed on-foot arrival by
-car), then Act 1 complete. Backlog: (1) stray-kill bookkeeping in melee-only
-runs (suspect: run-downs by AI cars or flee-escape edge), (2) move the
-mid-file VEHICLE_TYPES import in render.js to the header, (3) retry pane
-screenshots.
+Session 6: Act 2 — m05 Port of Cobalt (container yard, mixed foot+vehicle),
+m06 Tower Block Evac (hostage floors, 'reach' extraction objectives). Then
+m07 Convoy Takedown (armoured convoy = tougher vehicle mission) and m08 The
+Glow Kitchen (Boss: THE CHEMIST) to close Act 2. Also consider: Act-gate
+narrative interstitials between acts (cheap: briefing-style screens), and
+mission select/replay from the menu (CAMPAIGN data already supports it).
 
 ## Commands required to resume
 ```
