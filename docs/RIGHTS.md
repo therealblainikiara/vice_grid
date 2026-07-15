@@ -31,10 +31,14 @@ are not copyrightable; all expression here is new.
 |---|---|---|
 | All code | Written for this project | Project-owned |
 | All audio | Procedurally synthesised in `src/audio.js` | Project-owned |
-| All art | Procedurally drawn in `src/render.js` | Project-owned |
+| All art | Procedurally generated in `src/render3d.js` / `src/render.js` (geometry, textures and materials are built in code at runtime — no authored art files) | Project-owned |
 | Fonts | System font stack only (Segoe UI / system-ui) | OS-provided |
+| three.js 0.185.1 | npm, official registry (`node_modules/three`) | **MIT** — © three.js authors. Permissive; attribution retained in the package's LICENSE. Redistribution in the release build is permitted. |
 
-No third-party binary assets are present. No downloads from unofficial sources occurred.
+No third-party *art or audio* assets are present: every texture, mesh and sound
+is generated procedurally at runtime. three.js is a rendering library, not
+content, and is the only third-party dependency. No downloads from unofficial
+sources occurred.
 
 ## Asset replacement register (placeholders)
 

@@ -1,6 +1,37 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-15 (session 7, checkpoint 8) — ACTS 1–2 COMPLETE (m01–m08)
+Updated: 2026-07-15 (session 8, checkpoint 9) — 3D RENDERER; ACTS 1–2 (m01–m08)
+
+## Session-8: WebGL/three.js renderer (browser-verified)
+User feedback: the Canvas 2D look read as "1980 / Commodore 64". Rebuilt the
+presentation layer in real 3D. HONEST CEILING: this is a sharp stylised
+modern indie look, NOT PS6 AAA — that needs authored art assets. Everything
+here is still generated in code.
+- src/render3d.js: three.js 0.185.1 (MIT, vendored in node_modules, logged in
+  docs/RIGHTS.md). Reads the SAME world state; world.js/combat/arrest/AI/
+  missions are untouched — the pure-sim architecture made the swap clean.
+- Scene: world (x,y) -> three (x, height, y). Ground is a real material
+  (baked colour + ROUGHNESS maps, so puddles are mirror-smooth and asphalt
+  matte). Walls extrude into 3 InstancedMeshes (3 draw calls for a whole city)
+  with procedurally generated façade textures + EMISSIVE MAPS = lit windows.
+  Neon signs are emissive quads; the 6 nearest become real point lights.
+  Muzzle flashes and vat blasts are real dynamic lights. Real shadow mapping,
+  ACES tonemapping, UnrealBloom, fog. Characters are articulated rigs (torso/
+  head/arms/legs/weapon) with walk cycles, fold-to-floor on down/cuffed, and
+  hands-up poses.
+- main.js probes WebGL2 and falls back to the 2D renderer if absent (render.js
+  is retained as that fallback, not dead code).
+- Aiming: world.js now uses an optional `w.screenToWorld` hook; render3d
+  installs a ground-plane raycast (a perspective camera cannot use the flat
+  ZOOM maths). 2D path unchanged.
+- GOTCHA WORTH REMEMBERING: three r155+ uses physical light units, and this
+  world is measured in PIXELS (48 = 1 tile). Inverse-square falloff over
+  ~150-unit distances means point lights need FIVE-FIGURE intensities
+  (neon 20000, muzzle 260000, blast 900000). First attempt at 1-10 was a
+  black screen.
+- Perf on Intel Iris Xe @1280x720: 4-8 ms/frame (130-240fps). 10 point lights
+  cost ~30ms; 6 is the measured sweet spot. Bloom runs at half res.
+- 67 tests still green — the renderer swap touched no game logic.
 
 ## Session-7: Act 2 closes (m07, m08) + explosive hazards (browser-verified)
 - EXPLOSIVE PROPS: map char 'v' = pressurised GLOW vat (hp 45, solid).

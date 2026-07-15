@@ -481,8 +481,15 @@ function rememberPressed(p, c) { p.prev = { ...c }; }
 
 function aimPlayer(w, p, c) {
   if (c.usesMouseAim) {
-    const wx = w.cam.x + (c.aimScreenX - w.viewW / 2) / ZOOM;
-    const wy = w.cam.y + (c.aimScreenY - w.viewH / 2) / ZOOM;
+    // A perspective renderer installs screenToWorld (a ground-plane raycast);
+    // the flat maths below is only correct for an orthographic zoom.
+    let wx, wy;
+    if (w.screenToWorld) {
+      ({ x: wx, y: wy } = w.screenToWorld(c.aimScreenX, c.aimScreenY));
+    } else {
+      wx = w.cam.x + (c.aimScreenX - w.viewW / 2) / ZOOM;
+      wy = w.cam.y + (c.aimScreenY - w.viewH / 2) / ZOOM;
+    }
     p.aimAngle = angleTo(p.x, p.y, wx, wy);
   } else if (Math.hypot(c.aimDirX ?? 0, c.aimDirY ?? 0) > 0.01) {
     p.aimAngle = Math.atan2(c.aimDirY, c.aimDirX);

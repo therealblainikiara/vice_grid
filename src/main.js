@@ -5,13 +5,21 @@ import { makeAudio } from './audio.js';
 import { makeUI } from './ui.js';
 import { createWorld, updateWorld, addPlayer, restoreCheckpoint } from './world.js';
 import { draw } from './render.js';
+import { draw3d, resize3d } from './render3d.js';
 import { gradeMission } from './grading.js';
 import { MISSIONS, CAMPAIGN, AGENTS } from './missions.js';
 import { makeSaveStore, newCampaign, loadSettings, saveSettings } from './save.js';
 import { buyUpgrade, refundUpgrade, respec } from './upgrades.js';
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+// Probe WebGL2 before anyone claims a context: a canvas can only ever hold one
+// context type, and probing with getContext is safe (three reuses the same
+// object). No WebGL means we fall back to the 2D renderer rather than a black
+// screen — the sim and every other system are identical either way.
+const use3d = (() => {
+  try { return !!canvas.getContext('webgl2'); } catch { return false; }
+})();
+const ctx = use3d ? null : canvas.getContext('2d');
 const storage = window.localStorage;
 
 const settings = loadSettings(storage);
@@ -238,7 +246,7 @@ window.__vg = {
     for (let t = 0; t < seconds - 1e-9; t += STEP) updateWorld(world, STEP, controls);
     if (doDraw) {
       ui.updateHud(world, true);
-      draw(ctx, world, settings);
+      render(world);
     }
     if (world.status !== 'playing' && world.endTimer > 1.6) finishMission(world.status === 'success');
   },
@@ -248,6 +256,11 @@ window.__vg = {
 
 const STEP = 1 / 60;
 let acc = 0, last = performance.now();
+
+function render(w) {
+  if (use3d) draw3d(canvas, w, settings);
+  else draw(ctx, w, settings);
+}
 
 function frame(now) {
   const raw = Math.min(0.1, (now - last) / 1000);
@@ -284,7 +297,7 @@ function frame(now) {
     }
   }
 
-  if (world && (state === 'play' || state === 'pause')) draw(ctx, world, settings);
+  if (world && (state === 'play' || state === 'pause')) render(world);
   requestAnimationFrame(frame);
 }
 
