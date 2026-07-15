@@ -35,6 +35,55 @@ const SIGN_SETS = {
 const SKINS = ['#e8c39e', '#c68e5f', '#8d5524', '#f1d5b8', '#a56a3f'];
 const CIV_OUTFITS = ['#8d95a8', '#a89b8d', '#7d96a0', '#a08d99', '#96a08d', '#9a8da8'];
 
+// ---------------------------------------------------------------- labels
+//
+// Diegetic UI (HANDS UP, cuff rings, E-prompts) is not decoration: in a
+// perspective view you cannot judge ground distance the way you can top-down,
+// so the affordance IS the mechanic. Sprites billboard to camera; textures are
+// cached by text+colour because the same few strings recur constantly.
+
+const labelCache = new Map();
+
+function labelTexture(text, color) {
+  const k = text + '|' + color;
+  if (labelCache.has(k)) return labelCache.get(k);
+  const pad = 14, fs = 30;
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = `bold ${fs}px "Segoe UI", sans-serif`;
+  const tw = Math.ceil(probe.measureText(text).width);
+  const c = document.createElement('canvas');
+  c.width = tw + pad * 2; c.height = fs + pad;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(4,6,12,0.82)';
+  g.beginPath(); g.roundRect(0, 0, c.width, c.height, 10); g.fill();
+  g.strokeStyle = color; g.lineWidth = 2;
+  g.beginPath(); g.roundRect(1, 1, c.width - 2, c.height - 2, 10); g.stroke();
+  g.font = `bold ${fs}px "Segoe UI", sans-serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = color;
+  g.fillText(text, c.width / 2, c.height / 2 + 1);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  labelCache.set(k, { tex: t, w: c.width, h: c.height });
+  return labelCache.get(k);
+}
+
+function setLabel(sprite, text, color) {
+  if (sprite.userData.key === text + color) return;
+  sprite.userData.key = text + color;
+  const { tex, w, h } = labelTexture(text, color);
+  sprite.material.map = tex;
+  sprite.material.needsUpdate = true;
+  sprite.scale.set(w * 0.42, h * 0.42, 1);
+}
+
+function makeLabelSprite() {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+  s.renderOrder = 999;
+  s.userData = { key: null };
+  return s;
+}
+
 function hash(x, y, s = 0) {
   let h = (x * 374761393 + y * 668265263 + s * 2246822519) >>> 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
@@ -418,12 +467,40 @@ function buildHumanoid(st) {
   gun.position.set(14, 25, 4); gun.castShadow = true;
   g.add(gun);
 
-  g.userData = { torso, head, legL, legR, armL, armR, gun, stripe, accent, baseEmissive: st.emissive ?? 0.4 };
+  const label = makeLabelSprite();
+  label.position.y = 54;
+  label.visible = false;
+  g.add(label);
+
+  // ground ring: cuff progress, and the in-range affordance for interaction
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(19, 24, 32),
+    new THREE.MeshBasicMaterial({ color: '#ffd94f', transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 1.5;
+  ring.visible = false;
+  g.add(ring);
+
+  g.userData = { torso, head, legL, legR, armL, armR, gun, stripe, accent, label, ring,
+    ringArc: -1, baseEmissive: st.emissive ?? 0.4 };
   g.scale.setScalar(st.scale);
   return g;
 }
 
-function syncHumanoid(g, e, settings) {
+// Rebuild the arc only when it visibly moves — geometry churn per frame for a
+// progress ring is pure waste.
+function setRingProgress(g, frac) {
+  const q = Math.round(frac * 24) / 24;
+  if (g.userData.ringArc === q) return;
+  g.userData.ringArc = q;
+  g.userData.ring.geometry.dispose();
+  g.userData.ring.geometry = new THREE.RingGeometry(19, 24, 32, 1, -Math.PI / 2, q * Math.PI * 2);
+}
+
+// `inRange` is computed against the same radius world.js uses for cuffing, so
+// the prompt is a promise the sim actually keeps.
+function syncHumanoid(g, e, settings, inRange) {
   const u = g.userData;
   const dead = e.state === 'DEAD';
   const downed = e.state === 'DOWNED' || e.downed;
@@ -457,6 +534,39 @@ function syncHumanoid(g, e, settings) {
     u.legR.position.y = 8 + Math.abs(Math.sin(phase)) * 1.4;
   }
   u.accent.emissiveIntensity = e.hitFlash > 0 && !settings.reducedFlash ? 6 : (u.baseEmissive ?? 0.4);
+
+  // ---- status label: the read the 2D build had and this one lost
+  let text = null, colour = '#ffffff';
+  if (dead) text = null;
+  else if (cuffed) { text = 'CUFFED'; colour = '#ffd94f'; }
+  else if (downed) {
+    text = e.kind === 'player' ? 'DOWN — HOLD E TO REVIVE' : (inRange ? 'HOLD E — ARREST' : 'DOWN — ARREST');
+    colour = '#ff9c9c';
+  } else if (surr) {
+    text = inRange ? 'HOLD E — ARREST' : 'HANDS UP';
+    colour = inRange ? '#ffd94f' : '#ffffff';
+  } else if (e.boss) { text = e.name ?? 'BOSS'; colour = '#ff5f9e'; }
+  else if (e.kind === 'enemy' && e.state === 'FIGHT' && e.hp < e.maxHp * 0.45) { text = 'SHAKEN'; colour = '#ffd94f'; }
+
+  if (text) {
+    setLabel(u.label, text, colour);
+    u.label.visible = true;
+    u.label.position.y = (dead || downed || cuffed) ? 26 : 54;
+  } else u.label.visible = false;
+
+  // ---- cuff ring / in-range affordance
+  const cuffing = e.cuffProgress > 0 && e.cuffProgress < 1 && !cuffed;
+  if (cuffing) {
+    u.ring.visible = true;
+    u.ring.material.color.setStyle('#ffd94f');
+    u.ring.material.opacity = 0.95;
+    setRingProgress(g, e.cuffProgress);
+  } else if (inRange && !cuffed && !dead) {
+    u.ring.visible = true;
+    u.ring.material.color.setStyle('#58d0ba');
+    u.ring.material.opacity = 0.5;
+    setRingProgress(g, 1);
+  } else u.ring.visible = false;
 }
 
 // ---------------------------------------------------------------- props
@@ -570,6 +680,7 @@ export function draw3d(canvas, w, settings) {
   };
 
   syncBodies(w, settings);
+  syncPickups(w, now);
   syncProps(w, now, settings);
   syncVehicles(w, settings, now);
   syncBullets(w);
@@ -578,6 +689,18 @@ export function draw3d(canvas, w, settings) {
 
   R.bloom.strength = (settings.reducedFlash ? 0.35 : 0.7) * fx;
   R.composer.render();
+}
+
+// Mirrors world.js handleInteract: cuff radius 64, revive radius 70.
+function interactableBy(w, e) {
+  const cuffable = e.kind === 'enemy'
+    && e.state !== 'CUFFED'
+    && ['SURRENDER', 'FAKE_SURRENDER', 'DOWNED'].includes(e.state);
+  const revivable = e.kind === 'player' && e.downed;
+  if (!cuffable && !revivable) return false;
+  const r = revivable ? 70 : 64;
+  return w.players.some((p) => !p.downed && p !== e
+    && Math.hypot(p.x - e.x, p.y - e.y) < r);
 }
 
 function syncBodies(w, settings) {
@@ -590,12 +713,65 @@ function syncBodies(w, settings) {
       R.scene.add(g);
       R.bodies.set(e.id, g);
     }
-    syncHumanoid(g, e, settings);
+    syncHumanoid(g, e, settings, interactableBy(w, e));
   }
   for (const [id, g] of R.bodies) {
     if (seen.has(id)) continue;
     R.scene.remove(g);
     R.bodies.delete(id);
+  }
+}
+
+const PICKUP_STYLE = {
+  evidence: { colour: '#ffd94f', label: 'EVIDENCE' },
+  medkit: { colour: '#6dff9e', label: 'MEDKIT' },
+  weapon: { colour: '#7db4ff', label: 'WEAPON' },
+};
+
+function buildPickup(pk) {
+  const st = PICKUP_STYLE[pk.kind] ?? PICKUP_STYLE.weapon;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    pk.kind === 'evidence' ? new THREE.BoxGeometry(16, 20, 4)
+      : pk.kind === 'medkit' ? new THREE.BoxGeometry(18, 12, 14)
+        : new THREE.BoxGeometry(26, 6, 6),
+    new THREE.MeshStandardMaterial({ color: st.colour, emissive: st.colour, emissiveIntensity: 1.4, roughness: 0.4 }),
+  );
+  body.position.y = 16; body.castShadow = true;
+  g.add(body);
+  // a beacon column: findable across the room, which a flat token never was
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.5, 2.5, 90, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: st.colour, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  beam.position.y = 45;
+  g.add(beam);
+  const label = makeLabelSprite();
+  label.position.y = 62;
+  setLabel(label, st.label, st.colour);
+  g.add(label);
+  g.userData = { body, label };
+  return g;
+}
+
+function syncPickups(w, now) {
+  if (!R.pickups) R.pickups = new Map();
+  const seen = new Set();
+  for (const pk of w.pickups) {
+    seen.add(pk.id);
+    let g = R.pickups.get(pk.id);
+    if (!g) { g = buildPickup(pk); R.scene.add(g); R.pickups.set(pk.id, g); }
+    const near = w.players.some((p) => !p.downed && Math.hypot(p.x - pk.x, p.y - pk.y) < 52);
+    g.position.set(pk.x, Math.sin(now / 350 + pk.id) * 2.5, pk.y);
+    g.rotation.y = now / 1400 + pk.id;
+    setLabel(g.userData.label, near ? 'HOLD E' : (PICKUP_STYLE[pk.kind] ?? PICKUP_STYLE.weapon).label,
+      near ? '#ffffff' : (PICKUP_STYLE[pk.kind] ?? PICKUP_STYLE.weapon).colour);
+    g.userData.body.material.emissiveIntensity = near ? 3 : 1.4;
+  }
+  for (const [id, g] of R.pickups) {
+    if (seen.has(id)) continue;
+    R.scene.remove(g);
+    R.pickups.delete(id);
   }
 }
 

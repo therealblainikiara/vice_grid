@@ -33,6 +33,27 @@ here is still generated in code.
   cost ~30ms; 6 is the measured sweet spot. Bloom runs at half res.
 - 67 tests still green — the renderer swap touched no game logic.
 
+### Session-8b: PLAYABILITY REGRESSION FIX (reported by the user)
+Symptom: "E to collect / arrest worked before but I couldn't in the 3D build."
+Cause: NOT a broken interaction — mechanics tested fine programmatically. The
+3D rewrite silently dropped EVERY piece of diegetic UI the 2D renderer drew
+(HANDS UP / CUFFED / DOWN tags, the cuff progress ring, evidence labels, boss
+names, SHAKEN). Without them, and with perspective making ground distance far
+harder to judge than top-down, the player has no way to know who is
+surrendering, whether cuffing is working, or that they are in range.
+LESSON: when swapping a renderer, the diegetic UI is game mechanics, not
+decoration — inventory it before deleting it.
+Fix in render3d.js:
+- Billboarded label sprites (texture-cached by text+colour) for all status
+  reads, restored from the 2D build.
+- Ground rings: amber = live cuff progress (arc geometry rebuilt only when it
+  visibly moves), teal = "you are in range" affordance.
+- Prompts flip to "HOLD E — ARREST" / "HOLD E" only inside the SAME radii
+  world.js honours (cuff 64, revive 70, pickup 52) — verified in-range cuffs
+  and out-of-range does not, so the prompt is never a lie.
+- Pickups became beacon columns with labels: findable across a room, which a
+  flat ground token never was in perspective.
+
 ## Session-7: Act 2 closes (m07, m08) + explosive hazards (browser-verified)
 - EXPLOSIVE PROPS: map char 'v' = pressurised GLOW vat (hp 45, solid).
   Breaching one lights a 0.45s fuse (strobe + alarm cue), then it detonates:
