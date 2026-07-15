@@ -54,6 +54,26 @@ Fix in render3d.js:
 - Pickups became beacon columns with labels: findable across a room, which a
   flat ground token never was in perspective.
 
+### Session-8c: full renderer-parity audit (after the above)
+Finding one dropped-UI class implied more, so I diffed render.js against
+render3d.js feature by feature. Six further regressions found and fixed:
+1. ENEMY/BOSS HP BARS — missing. Critical: the surrender threshold is read off
+   boss health, so the arrest mechanic was flying blind. Restored as billboard
+   sprites (bg + fill; a sprite scales about its centre, so the fill also
+   slides left to stay pinned).
+2. REACH-ZONE GATES — m03/m07 gate objectives were literally invisible.
+   Restored as pulsing ground ring + light column + label.
+3. VEHICLE HP + SHIPMENT label — no way to see the hauler nearing a stop.
+4. HIT / SPARK / DEBRIS / SWING effects — a firefight had no impact feedback.
+5. INTELLIGENCE UPGRADE PERKS — the evidence compass (Lv1+) was gone and
+   SHAKEN (Lv3+) was showing for everyone, silently refunding a paid upgrade.
+   Both now gated correctly.
+6. TAG ROTATION BUG — labels/rings were children of the rig, which rotates to
+   aim and folds flat (rotation.z) when downed, flinging labels onto the floor
+   beside bodies. Tags now live in their own non-rotating world-space group.
+Perf after: ~12 ms/frame (84fps) at 720p on Iris Xe. 67 tests green.
+STILL OUTSTANDING (2D had, 3D lacks): player-hurt red vignette.
+
 ## Session-7: Act 2 closes (m07, m08) + explosive hazards (browser-verified)
 - EXPLOSIVE PROPS: map char 'v' = pressurised GLOW vat (hp 45, solid).
   Breaching one lights a 0.45s fuse (strobe + alarm cue), then it detonates:

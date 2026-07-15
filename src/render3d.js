@@ -467,12 +467,21 @@ function buildHumanoid(st) {
   gun.position.set(14, 25, 4); gun.castShadow = true;
   g.add(gun);
 
+  g.userData = { torso, head, legL, legR, armL, armR, gun, stripe, accent,
+    baseEmissive: st.emissive ?? 0.4 };
+  g.scale.setScalar(st.scale);
+  return g;
+}
+
+// Tags live OUTSIDE the rig. The rig rotates to aim and folds flat (rotation.z)
+// when downed — anything parented to it swings away with the body, which put
+// labels on the floor beside corpses instead of above them.
+function makeTagGroup() {
+  const t = new THREE.Group();
   const label = makeLabelSprite();
   label.position.y = 54;
   label.visible = false;
-  g.add(label);
 
-  // ground ring: cuff progress, and the in-range affordance for interaction
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(19, 24, 32),
     new THREE.MeshBasicMaterial({ color: '#ffd94f', transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false }),
@@ -480,27 +489,48 @@ function buildHumanoid(st) {
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 1.5;
   ring.visible = false;
-  g.add(ring);
 
-  g.userData = { torso, head, legL, legR, armL, armR, gun, stripe, accent, label, ring,
-    ringArc: -1, baseEmissive: st.emissive ?? 0.4 };
-  g.scale.setScalar(st.scale);
-  return g;
+  const hpBg = new THREE.Sprite(new THREE.SpriteMaterial({ color: '#000000', opacity: 0.7, transparent: true, depthTest: false }));
+  hpBg.scale.set(34, 5, 1);
+  hpBg.position.y = 46;
+  hpBg.renderOrder = 998;
+  hpBg.visible = false;
+  const hpFill = new THREE.Sprite(new THREE.SpriteMaterial({ color: '#9dff57', depthTest: false, transparent: true }));
+  hpFill.scale.set(32, 3, 1);
+  hpFill.position.y = 46;
+  hpFill.renderOrder = 999;
+  hpFill.visible = false;
+
+  t.add(label, ring, hpBg, hpFill);
+  t.userData = { label, ring, hpBg, hpFill, ringArc: -1 };
+  return t;
+}
+
+// A sprite scales about its centre, so a shrinking bar must also slide left to
+// stay pinned at its left edge.
+function setHpBar(tag, frac, colour, y) {
+  const u = tag.userData;
+  const full = 32;
+  u.hpBg.visible = u.hpFill.visible = true;
+  u.hpBg.position.y = y; u.hpFill.position.y = y;
+  u.hpFill.scale.x = Math.max(0.001, full * frac);
+  u.hpFill.position.x = -(full - full * frac) / 2;
+  u.hpFill.material.color.setStyle(colour);
 }
 
 // Rebuild the arc only when it visibly moves — geometry churn per frame for a
 // progress ring is pure waste.
-function setRingProgress(g, frac) {
+function setRingProgress(tag, frac) {
   const q = Math.round(frac * 24) / 24;
-  if (g.userData.ringArc === q) return;
-  g.userData.ringArc = q;
-  g.userData.ring.geometry.dispose();
-  g.userData.ring.geometry = new THREE.RingGeometry(19, 24, 32, 1, -Math.PI / 2, q * Math.PI * 2);
+  if (tag.userData.ringArc === q) return;
+  tag.userData.ringArc = q;
+  tag.userData.ring.geometry.dispose();
+  tag.userData.ring.geometry = new THREE.RingGeometry(19, 24, 32, 1, -Math.PI / 2, q * Math.PI * 2);
 }
 
 // `inRange` is computed against the same radius world.js uses for cuffing, so
 // the prompt is a promise the sim actually keeps.
-function syncHumanoid(g, e, settings, inRange) {
+function syncHumanoid(g, tag, e, settings, inRange, intel) {
   const u = g.userData;
   const dead = e.state === 'DEAD';
   const downed = e.state === 'DOWNED' || e.downed;
@@ -535,7 +565,10 @@ function syncHumanoid(g, e, settings, inRange) {
   }
   u.accent.emissiveIntensity = e.hitFlash > 0 && !settings.reducedFlash ? 6 : (u.baseEmissive ?? 0.4);
 
-  // ---- status label: the read the 2D build had and this one lost
+  // ---- tags: position only, never rotation (see makeTagGroup)
+  const t = tag.userData;
+  tag.position.set(e.x, 0, e.y);
+
   let text = null, colour = '#ffffff';
   if (dead) text = null;
   else if (cuffed) { text = 'CUFFED'; colour = '#ffd94f'; }
@@ -546,27 +579,36 @@ function syncHumanoid(g, e, settings, inRange) {
     text = inRange ? 'HOLD E — ARREST' : 'HANDS UP';
     colour = inRange ? '#ffd94f' : '#ffffff';
   } else if (e.boss) { text = e.name ?? 'BOSS'; colour = '#ff5f9e'; }
-  else if (e.kind === 'enemy' && e.state === 'FIGHT' && e.hp < e.maxHp * 0.45) { text = 'SHAKEN'; colour = '#ffd94f'; }
+  // SHAKEN is an Intelligence Lv3 perk — showing it to everyone silently
+  // refunds an upgrade the player paid for
+  else if (intel >= 3 && e.kind === 'enemy' && e.state === 'FIGHT' && e.hp < e.maxHp * 0.45) {
+    text = 'SHAKEN'; colour = '#ffd94f';
+  }
 
   if (text) {
-    setLabel(u.label, text, colour);
-    u.label.visible = true;
-    u.label.position.y = (dead || downed || cuffed) ? 26 : 54;
-  } else u.label.visible = false;
+    setLabel(t.label, text, colour);
+    t.label.visible = true;
+    t.label.position.y = (dead || downed || cuffed) ? 30 : 54;
+  } else t.label.visible = false;
+
+  // ---- health: the read that tells you a boss is near giving up
+  if (e.kind === 'enemy' && !dead && !cuffed && e.hp > 0 && e.hp < e.maxHp) {
+    setHpBar(tag, e.hp / e.maxHp, e.boss ? '#ff5f9e' : '#9dff57', (downed ? 22 : 46));
+  } else { t.hpBg.visible = false; t.hpFill.visible = false; }
 
   // ---- cuff ring / in-range affordance
   const cuffing = e.cuffProgress > 0 && e.cuffProgress < 1 && !cuffed;
   if (cuffing) {
-    u.ring.visible = true;
-    u.ring.material.color.setStyle('#ffd94f');
-    u.ring.material.opacity = 0.95;
-    setRingProgress(g, e.cuffProgress);
+    t.ring.visible = true;
+    t.ring.material.color.setStyle('#ffd94f');
+    t.ring.material.opacity = 0.95;
+    setRingProgress(tag, e.cuffProgress);
   } else if (inRange && !cuffed && !dead) {
-    u.ring.visible = true;
-    u.ring.material.color.setStyle('#58d0ba');
-    u.ring.material.opacity = 0.5;
-    setRingProgress(g, 1);
-  } else u.ring.visible = false;
+    t.ring.visible = true;
+    t.ring.material.color.setStyle('#58d0ba');
+    t.ring.material.opacity = 0.5;
+    setRingProgress(tag, 1);
+  } else t.ring.visible = false;
 }
 
 // ---------------------------------------------------------------- props
@@ -646,7 +688,10 @@ function buildVehicle(v) {
     bar.position.set(-2, H + 18, 0);
     g.add(bar);
   }
-  g.userData = { body, bar };
+  const tag = makeTagGroup();
+  tag.position.y = 0;
+  g.add(tag);
+  g.userData = { body, bar, tag };
   return g;
 }
 
@@ -686,6 +731,8 @@ export function draw3d(canvas, w, settings) {
   syncBullets(w);
   syncEffects(w, fx, settings);
   syncNeon(w, fx);
+  syncZones(w, now);
+  syncCompass(w, now);
 
   R.bloom.strength = (settings.reducedFlash ? 0.35 : 0.7) * fx;
   R.composer.render();
@@ -704,20 +751,23 @@ function interactableBy(w, e) {
 }
 
 function syncBodies(w, settings) {
+  const intel = w.settings?.upgrades?.intelligence ?? 0;
   const seen = new Set();
   for (const e of [...w.civilians, ...w.enemies, ...w.players]) {
     seen.add(e.id);
-    let g = R.bodies.get(e.id);
-    if (!g) {
-      g = buildHumanoid(styleFor(e, settings));
-      R.scene.add(g);
-      R.bodies.set(e.id, g);
+    let rec = R.bodies.get(e.id);
+    if (!rec) {
+      const rig = buildHumanoid(styleFor(e, settings));
+      const tag = makeTagGroup();
+      R.scene.add(rig, tag);
+      rec = { rig, tag };
+      R.bodies.set(e.id, rec);
     }
-    syncHumanoid(g, e, settings, interactableBy(w, e));
+    syncHumanoid(rec.rig, rec.tag, e, settings, interactableBy(w, e), intel);
   }
-  for (const [id, g] of R.bodies) {
+  for (const [id, rec] of R.bodies) {
     if (seen.has(id)) continue;
-    R.scene.remove(g);
+    R.scene.remove(rec.rig, rec.tag);
     R.bodies.delete(id);
   }
 }
@@ -801,9 +851,27 @@ function syncVehicles(w, settings, now) {
   for (const v of w.vehicles ?? []) {
     seen.add(v.id);
     let g = R.vehicles.get(v.id);
-    if (!g) { g = buildVehicle(v); R.scene.add(g); R.vehicles.set(v.id, g); }
+    if (!g) {
+      g = buildVehicle(v);
+      R.scene.add(g);
+      // the tag rides in world space: a car tag parented to the car would
+      // barrel-roll with it
+      R.scene.add(g.userData.tag);
+      R.vehicles.set(v.id, g);
+    }
     g.position.set(v.x, 0, v.y);
     g.rotation.y = -v.angle;
+
+    const t = g.userData.tag;
+    t.position.set(v.x, 0, v.y);
+    if (v.tag === 'truck' && !v.disabled) {
+      setLabel(t.userData.label, 'SHIPMENT', '#ffca6b');
+      t.userData.label.visible = true;
+      t.userData.label.position.y = 92;
+    } else t.userData.label.visible = false;
+    if (v.tag && !v.disabled && v.hp < v.maxHp) {
+      setHpBar(t, v.hp / v.maxHp, v.tag === 'truck' ? '#ffca6b' : '#ff8a3d', 74);
+    } else { t.userData.hpBg.visible = false; t.userData.hpFill.visible = false; }
     if (v.disabled) { g.rotation.z = 0.1; g.userData.body.material.color.setStyle('#2a2d36'); }
     if (g.userData.bar) {
       const phase = settings.reducedFlash ? 0 : Math.floor(now / 180) % 2;
@@ -814,7 +882,7 @@ function syncVehicles(w, settings, now) {
   }
   for (const [id, g] of R.vehicles) {
     if (seen.has(id)) continue;
-    R.scene.remove(g);
+    R.scene.remove(g, g.userData.tag);
     R.vehicles.delete(id);
   }
 }
@@ -858,27 +926,116 @@ function syncEffects(w, fx, settings) {
     R.blastLight.intensity = 900000 * fx * (1 - blast.t / blast.dur);
   } else R.blastLight.intensity = 0;
 
+  // Blasts, plus the small impact reads (hit/spark/debris/swing) that the 2D
+  // build had: without them a firefight has no feedback that rounds connect.
   const seen = new Set();
   for (const f of w.effects) {
-    if (f.kind !== 'blast') continue;
+    if (!['blast', 'hit', 'spark', 'debris', 'break', 'swing'].includes(f.kind)) continue;
+    if (settings.reducedFlash && f.kind !== 'blast') continue;
     seen.add(f);
     let m = R.blasts.get(f);
     if (!m) {
-      m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), R.mat.blast.clone());
+      m = f.kind === 'blast' || f.kind === 'hit'
+        ? new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), R.mat.blast.clone())
+        : new THREE.Sprite(new THREE.SpriteMaterial({ color: '#ffd94f', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
       R.scene.add(m);
       R.blasts.set(f, m);
     }
     const t = f.t / f.dur;
-    m.position.set(f.x, 26, f.y);
-    m.scale.setScalar(12 + t * 118);
-    m.material.opacity = (1 - t) * 0.55 * fx;
-    m.material.color.setStyle(t < 0.3 ? '#fff6d8' : '#ff8a3d');
+    if (f.kind === 'blast') {
+      m.position.set(f.x, 26, f.y);
+      m.scale.setScalar(12 + t * 118);
+      m.material.opacity = (1 - t) * 0.55 * fx;
+      m.material.color.setStyle(t < 0.3 ? '#fff6d8' : '#ff8a3d');
+    } else if (f.kind === 'hit') {
+      m.position.set(f.x, 24, f.y);
+      m.scale.setScalar(3 + t * 14);
+      m.material.opacity = (1 - t) * 0.85 * fx;
+      m.material.color.setStyle('#ffffff');
+    } else if (f.kind === 'swing') {
+      m.position.set(f.x + Math.cos(f.a) * 26, 24, f.y + Math.sin(f.a) * 26);
+      m.scale.setScalar(30 * (1 - t) + 8);
+      m.material.opacity = (1 - t) * 0.5 * fx;
+      m.material.color.setStyle('#ffffff');
+    } else { // spark / debris / break
+      m.position.set(f.x, 12 + t * 16, f.y);
+      m.scale.setScalar((f.kind === 'break' ? 26 : 14) * (0.4 + t));
+      m.material.opacity = (1 - t) * 0.8 * fx;
+      m.material.color.setStyle(f.kind === 'spark' ? '#ffd94f' : '#8a7a5a');
+    }
   }
   for (const [f, m] of R.blasts) {
     if (seen.has(f)) continue;
     R.scene.remove(m);
     R.blasts.delete(f);
   }
+}
+
+// Reach-zone objectives (m03/m07 gates) were invisible in 3D: an objective you
+// cannot see is an objective that does not exist.
+function syncZones(w, now) {
+  if (!R.zones) R.zones = new Map();
+  const seen = new Set();
+  for (const z of w.zones ?? []) {
+    if (z.done) continue;
+    seen.add(z);
+    let g = R.zones.get(z);
+    if (!g) {
+      g = new THREE.Group();
+      const disc = new THREE.Mesh(
+        new THREE.RingGeometry(z.r * 0.82, z.r, 48),
+        new THREE.MeshBasicMaterial({ color: '#58d0ba', transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.y = 2;
+      const column = new THREE.Mesh(
+        new THREE.CylinderGeometry(z.r * 0.9, z.r * 0.9, 160, 24, 1, true),
+        new THREE.MeshBasicMaterial({ color: '#58d0ba', transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      column.position.y = 80;
+      const label = makeLabelSprite();
+      label.position.y = 172;
+      setLabel(label, 'INTERCHANGE GATE', '#58d0ba');
+      g.add(disc, column, label);
+      g.position.set(z.x, 0, z.y);
+      R.scene.add(g);
+      R.zones.set(z, g);
+    }
+    g.children[0].material.opacity = 0.35 + 0.25 * Math.sin(now / 300);
+  }
+  for (const [z, g] of R.zones) {
+    if (seen.has(z)) continue;
+    R.scene.remove(g);
+    R.zones.delete(z);
+  }
+}
+
+// Intelligence Lv1+: a compass needle toward the nearest un-collected evidence.
+function syncCompass(w, now) {
+  const intel = w.settings?.upgrades?.intelligence ?? 0;
+  if (!R.compass) {
+    R.compass = new THREE.Mesh(
+      new THREE.ConeGeometry(6, 16, 4),
+      new THREE.MeshBasicMaterial({ color: '#ffd94f', transparent: true, depthTest: false }),
+    );
+    R.compass.renderOrder = 997;
+    R.scene.add(R.compass);
+  }
+  const p = w.players.find((q) => !q.downed);
+  let best = null, bd = Infinity;
+  if (intel >= 1 && p) {
+    for (const pk of w.pickups) {
+      if (pk.kind !== 'evidence') continue;
+      const d = Math.hypot(pk.x - p.x, pk.y - p.y);
+      if (d < bd) { bd = d; best = pk; }
+    }
+  }
+  if (!best || bd < 90) { R.compass.visible = false; return; }
+  const a = Math.atan2(best.y - p.y, best.x - p.x);
+  R.compass.visible = true;
+  R.compass.position.set(p.x + Math.cos(a) * 40, 40, p.y + Math.sin(a) * 40);
+  R.compass.rotation.set(Math.PI / 2, 0, -a - Math.PI / 2);
+  R.compass.material.opacity = 0.5 + 0.4 * Math.sin(now / 240);
 }
 
 // Only the nearest few signs become real lights; the rest stay emissive + bloom.
