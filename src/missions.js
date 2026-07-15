@@ -34,6 +34,8 @@ export const ENEMY_TYPES = {
   stacks:   { hp: 520, speed: 120, weapon: 'stormcaster', personality: 'hard', color: '#ffd94f', score: 'boss', armor: 0.35, boss: true },
   crane:    { hp: 380, speed: 110, weapon: 'rifle',   personality: 'hard',   color: '#6cd8ff', score: 'boss', armor: 0.25, boss: true },
   shiver:   { hp: 320, speed: 175, weapon: 'smg',     personality: 'sly',    color: '#a0f0ff', score: 'boss', armor: 0.15, boss: true },
+  lockjaw:  { hp: 460, speed: 125, weapon: 'shotgun', personality: 'hard',   color: '#8fa4c0', score: 'boss', armor: 0.4,  boss: true },
+  chemist:  { hp: 260, speed: 150, weapon: 'smg',     personality: 'sly',    color: '#b6ff4f', score: 'boss', armor: 0.05, boss: true },
 };
 
 // Full campaign skeleton. `implemented` gates mission select during development;
@@ -47,8 +49,8 @@ export const CAMPAIGN = [
   { id: 'op2', act: 1, n: 0, title: 'OP: Glow Courier', type: 'op', implemented: false },
   { id: 'm05', act: 2, n: 5, title: 'Port of Cobalt', type: 'main', implemented: true },
   { id: 'm06', act: 2, n: 6, title: 'Tower Block Evac', type: 'main', implemented: true },
-  { id: 'm07', act: 2, n: 7, title: 'Convoy Takedown', type: 'main', implemented: false },
-  { id: 'm08', act: 2, n: 8, title: 'The Glow Kitchen', type: 'main', implemented: false },
+  { id: 'm07', act: 2, n: 7, title: 'Convoy Takedown', type: 'main', implemented: true },
+  { id: 'm08', act: 2, n: 8, title: 'The Glow Kitchen', type: 'main', implemented: true },
   { id: 'op3', act: 2, n: 0, title: 'OP: Dockside Score Attack', type: 'op', implemented: false },
   { id: 'op4', act: 2, n: 0, title: 'OP: Witness Escort', type: 'op', implemented: false },
   { id: 'm09', act: 3, n: 9, title: 'Precinct Siege', type: 'main', implemented: false },
@@ -286,6 +288,7 @@ MISSIONS.m04 = {
   id: 'm04',
   title: 'M04 — WAREHOUSE INTERCEPT',
   parSec: 540,
+  signage: 'industrial',
   briefing: {
     speaker: 'DISPATCH',
     lines: [
@@ -363,6 +366,7 @@ MISSIONS.m05 = {
   id: 'm05',
   title: 'M05 — PORT OF COBALT',
   parSec: 540,
+  signage: 'industrial',
   briefing: {
     speaker: 'DISPATCH',
     lines: [
@@ -479,6 +483,144 @@ MISSIONS.m06 = {
     set(4, 2, 'V'); set(16, 9, 'V');
     set(27, 17, 'p'); set(27, 9, 'm'); set(9, 9, 'w');
     set(2, 19, 'P');
+  }),
+};
+
+MISSIONS.m07 = {
+  id: 'm07',
+  title: 'M07 — CONVOY TAKEDOWN',
+  parSec: 330,
+  playerVehicle: { type: 'patrol', x: 5, y: 10 },
+  vehicles: [
+    { type: 'gangcar',  x: 26, y: 8,  tag: 'escort', ai: 'escort', cruise: 265 },
+    { type: 'gangcar',  x: 30, y: 11, tag: 'escort', ai: 'escort', cruise: 265 },
+    { type: 'gangbike', x: 34, y: 9,  tag: 'escort', ai: 'escort', cruise: 330 },
+    { type: 'gangbike', x: 34, y: 12, tag: 'escort', ai: 'escort', cruise: 330 },
+    { type: 'armoured', x: 40, y: 10, tag: 'truck',  ai: 'convoy', cruise: 165 },
+  ],
+  traffic: { rows: [3, 5], eastRows: [], rate: 3.0, max: 4 },
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The tower block gave up a schedule: Glowline moves the week\'s cut down Vermillion Boulevard tonight, and they have stopped pretending to be a street gang.',
+      'That is an armoured transport — Halcyon surplus, sold to dealers with the serial numbers still on it. Your pistol will not open it. Your bumper might.',
+      'Runners and bikes will screen it. Peel them off, then bully the transport to a stop.',
+      'The commander rides in the cab. They call him LOCKJAW, and he has never once let go of anything.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Transport stopped, cut seized, LOCKJAW off the board. That armour was invoiced to a Halcyon Wellness subsidiary, Grid.',
+      'The invoice lists a delivery address: an industrial kitchen under the old cannery. That is where they cook it.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The transport made the limits and the cut is gone. Run it back.'] },
+  objectives: [
+    { id: 'clear', label: 'Peel off the convoy screen', primary: true, type: 'neutralize', count: 4, tag: 'escort' },
+    { id: 'boss', label: 'Stop the transport and take down LOCKJAW', primary: true, type: 'boss' },
+    { id: 'cuffs', label: 'Optional: Arrest 2 suspects', primary: false, type: 'arrest', count: 2 },
+    { id: 'civs', label: 'Optional: Keep the boulevard clear of casualties', primary: false, type: 'protect', count: 1 },
+    { id: 'gate', label: 'Optional: Break the convoy before the river bridge', primary: false, type: 'reach', tag: 'gate' },
+  ],
+  escalation: {
+    at: 2,
+    banner: 'CHASE CARS JOINING FROM THE RAMPS',
+    spawns: [],
+    vehicles: [
+      { type: 'gangcar', x: 8, y: 9,  tag: 'outrider', ai: 'escort', cruise: 300 },
+      { type: 'gangcar', x: 8, y: 12, tag: 'outrider', ai: 'escort', cruise: 300 },
+    ],
+  },
+  boss: {
+    type: 'lockjaw', x: 100, y: 10, trigger: 'truck', name: 'LOCKJAW',
+    intro: 'LOCKJAW: "Eleven years I never lost a load. You get to be the first thing I break instead."',
+    phase2At: 0.5, phase2Banner: 'LOCKJAW DROPS THE PLATE ARMOUR',
+    phase2Spawns: [],
+    surrenderAt: 0.1,
+  },
+  map: buildMap(132, 16, ({ set, rect, rowFill }) => {
+    rowFill(1, ','); rowFill(2, ',');
+    rowFill(3, '~'); rowFill(4, '~'); rowFill(5, '~');   // westbound
+    rowFill(6, '=');                                      // median
+    rowFill(7, '~'); rowFill(8, '~'); rowFill(9, '~');    // eastbound
+    rowFill(10, '~'); rowFill(11, '~'); rowFill(12, '~');
+    rowFill(13, ','); rowFill(14, ',');
+    for (let x = 8; x < 130; x += 16) set(x, 6, '~');     // median gaps
+    set(5, 10, 'P');
+    set(104, 10, 'X');                                    // river bridge gate
+    for (let x = 12; x < 130; x += 27) { set(x, 1, 'c'); set(x + 3, 14, 'c'); }
+  }),
+};
+
+MISSIONS.m08 = {
+  id: 'm08',
+  title: 'M08 — THE GLOW KITCHEN',
+  parSec: 600,
+  signage: 'industrial',
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Under the old cannery, Grid. This is the kitchen — where Halcyon\'s "wellness compound" becomes the stuff killing kids on Marrow Street.',
+      'The cook is a contractor with a doctorate and a non-disclosure agreement. THE CHEMIST. He is not a fighter, which makes him a liar instead — do not trust his hands.',
+      'The room is full of pressurised GLOW vats. Shoot one and it goes, and it takes its neighbours with it. Blast doors work both ways.',
+      'His formula notes and the Halcyon supply contract are both down there. Get them and Act Two is finished.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The kitchen is cold. Whatever you left of it, nobody is cooking there again.',
+      'The supply contract is counter-signed by a Halcyon vice president — and by a Civic Shield procurement officer. The people who are supposed to stop this are billing for it.',
+      'That is Act Three, Grid. The city stops being the backdrop and starts being the opponent.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The kitchen is still cooking. Go back down there.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize the kitchen crew', primary: true, type: 'neutralize', count: 9, tag: 'gunman' },
+    { id: 'boss', label: 'Take down THE CHEMIST', primary: true, type: 'boss' },
+    { id: 'cuffs', label: 'Optional: Arrest 4 suspects', primary: false, type: 'arrest', count: 4 },
+    { id: 'civs', label: 'Optional: No pressed workers harmed', primary: false, type: 'protect', count: 0 },
+    { id: 'ledger', label: 'Optional: Seize the formula + the Halcyon contract', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'THE CHEMIST VENTS THE LINE',
+    spawns: [
+      { type: 'vipguard', x: 2, y: 12 }, { type: 'bruiser', x: 33, y: 12 },
+      { type: 'dealer', x: 2, y: 18 }, { type: 'vipguard', x: 33, y: 18 },
+    ],
+  },
+  boss: {
+    type: 'chemist', x: 17, y: 3, name: 'THE CHEMIST',
+    intro: 'THE CHEMIST: "I have a doctorate. I have indemnity. I have — oh, you are still walking toward me."',
+    phase2At: 0.55, phase2Banner: 'THE CHEMIST OPENS THE VALVES',
+    phase2Spawns: [{ type: 'vipguard', x: 12, y: 4 }, { type: 'vipguard', x: 22, y: 4 }],
+    surrenderAt: 0.4, // folds early — but he is sly, so his hands lie
+  },
+  map: buildMap(36, 24, ({ set, rect, rowFill }) => {
+    // clean room / office strip along the top, blast wall beneath it
+    rowFill(5, '#');
+    rect(15, 5, 5, 1, '.');                 // airlock into the cook floor
+    set(3, 1, 'V'); set(32, 1, 'V');        // formula notes + Halcyon contract
+    rect(2, 2, 2, 2, 's'); rect(31, 2, 2, 2, 's');
+    set(9, 2, 'E'); set(26, 2, 'E');
+    // the cook floor: banks of vats with aisles between them
+    for (const vy of [8, 12, 16]) {
+      for (let vx = 4; vx <= 31; vx += 3) set(vx, vy, 'v');
+    }
+    // catwalk cover between the banks
+    for (const cy of [10, 14]) for (let cx = 6; cx <= 29; cx += 6) set(cx, cy, 'c');
+    // crew on the floor
+    set(6, 9, 'E'); set(14, 9, 'E'); set(24, 9, 'E'); set(30, 11, 'E');
+    set(8, 13, 'E'); set(20, 13, 'E'); set(28, 15, 'E');
+    // pressed workers stand in the mid-aisles: close enough that a careless
+    // chain singes them, far enough that quadratic falloff lets them live
+    set(11, 10, 'C'); set(22, 10, 'C'); set(17, 14, 'C'); set(8, 21, 'C');
+    // loading dock at the bottom: player entry, kit, no vats
+    rowFill(19, '#'); rect(16, 19, 4, 1, '.');
+    rowFill(20, '.'); rowFill(21, '.'); rowFill(22, ',');
+    set(3, 21, 'P'); set(30, 21, 'm'); set(27, 21, 'p');
   }),
 };
 

@@ -1,6 +1,32 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-15 (session 6, checkpoint 7) — m01–m06 playable
+Updated: 2026-07-15 (session 7, checkpoint 8) — ACTS 1–2 COMPLETE (m01–m08)
+
+## Session-7: Act 2 closes (m07, m08) + explosive hazards (browser-verified)
+- EXPLOSIVE PROPS: map char 'v' = pressurised GLOW vat (hp 45, solid).
+  Breaching one lights a 0.45s fuse (strobe + alarm cue), then it detonates:
+  blastDamage() in combat.js is quadratic (peak 95, radius 130) so the
+  killzone is tight and two steps back is survivable. Chain ignition uses a
+  SEPARATE, larger radius (CHAIN_R 150) — tanks rupture each other further
+  than they kill people. Chains cascade on 0.18s fuses, damaging entities and
+  vehicles; cuffed suspects and car occupants are shielded.
+  VERIFIED: one bullet cascaded all 10 vats of one bank; the two neighbouring
+  banks (4 tiles away) were untouched — aisles work as firebreaks by design.
+  Workers in the mid-aisles were hurt but survived (falloff tuned right).
+- m07 Convoy Takedown: Vermillion Boulevard, new `armoured` vehicle type
+  (1100 hp Halcyon-surplus transport), 2 runners + 2 bikes screening, ramp
+  escalation, boss LOCKJAW (armour 0.4, surrenders only at 10%).
+  E2E: screen peeled, transport stopped, LOCKJAW arrested, grade B.
+- m08 The Glow Kitchen: cannery lab — clean room + blast walls + three vat
+  banks + loading dock; boss THE CHEMIST (sly, folds early at 40% but his
+  hands lie). E2E clean run: 14 arrests / 0 kills / 0 workers harmed, THE
+  CHEMIST arrested, all 30 vats intact, grade A.
+- Signage fix (spotted in a live play screenshot): SIGN_SETS.street vs
+  .industrial per mission (`signage` field) — an industrial kitchen no longer
+  advertises BAIL BONDS; m04/m05/m08 use hazard placards. Signs also now
+  refuse to place within 120px of another sign on the same wall run, ending
+  the overprinted-gibberish text seen since session 2.
+- 67 tests green (added 2 pure blastDamage tests).
 
 ## Session-6: Act 2 opens (m05, m06) + mission replay (browser-verified)
 - buildMap() grid builder in missions.js: sealed borders by construction —
@@ -149,11 +175,13 @@ Updated: 2026-07-15 (session 6, checkpoint 7) — m01–m06 playable
   placeholder maps — track them here.
 
 ## Exact next task
-Session 7: m07 Convoy Takedown (armoured convoy — reuse vehicle system with
-tougher escorts + an armoured hauler; consider a mounted-gun escort variant)
-and m08 The Glow Kitchen (Boss: THE CHEMIST — lab interior, environmental
-hazard idea: volatile vats as explosive props) to close Act 2. Then Act 3.
-Also: co-op split of upgrade points is untested with a physical gamepad.
+Session 8: ACT 3 "The City Fights Back" — m09 Precinct Siege (defend/survive
+objectives; introduce corrupt Civic Shield tactical units as a new faction
+with amber colour-coding + shield enemies), m10 Evidence Run (escort/defend a
+convoy — the reverse of m03/m07, reusing vehicles). Then m11 Blackout
+(darkness as a mechanic — the lighting layer already supports it) and m12
+Broadcast Tower to close Act 3. Backlog: co-op upgrade-point split untested
+with a physical gamepad; ops o1-o8 still unbuilt; NG+ and endings unbuilt.
 
 ## Commands required to resume
 ```

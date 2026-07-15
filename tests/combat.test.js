@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   WEAPONS, damageAtDistance, effectiveSpread, applyDamage,
-  makeWeaponState, canFire, fire, startReload, tickWeapon,
+  makeWeaponState, canFire, fire, startReload, tickWeapon, blastDamage,
 } from '../src/combat.js';
 
 test('damage is full inside falloff range', () => {
@@ -80,6 +80,21 @@ test('weapon state: cannot reload a full mag or the power weapon', () => {
   const power = makeWeaponState('stormcaster');
   power.ammo = 3;
   assert.equal(startReload(power), false);
+});
+
+test('blast is lethal at the centre and harmless past the rim', () => {
+  assert.equal(blastDamage(90, 0, 120), 90);
+  assert.equal(blastDamage(90, 120, 120), 0);
+  assert.equal(blastDamage(90, 500, 120), 0);
+});
+
+test('blast falls off quadratically: stepping back pays off', () => {
+  const half = blastDamage(90, 60, 120);
+  assert.ok(half < 90 * 0.5, 'half-radius should already be under half damage');
+  assert.ok(half > 0);
+  // each step outward hurts less than the last
+  const d = [0, 30, 60, 90].map((x) => blastDamage(90, x, 120));
+  assert.ok(d[0] - d[1] > d[2] - d[3]);
 });
 
 test('empty weapon cannot fire', () => {

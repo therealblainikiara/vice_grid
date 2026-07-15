@@ -49,6 +49,15 @@ export function applyDamage(target, amount, { lethal = true, stun = 0 } = {}) {
 
 function clampResist(a) { return Math.max(0, Math.min(0.8, a)); }
 
+// Explosive falloff (vats, fuel, wrecks): full force at the centre, nothing at
+// the rim. Quadratic so the killzone is tight and the fringe is survivable —
+// standing two steps back should read as a decision that paid off.
+export function blastDamage(peak, distance, radius) {
+  if (distance >= radius) return 0;
+  const t = 1 - distance / radius;
+  return peak * t * t;
+}
+
 // Weapon runtime state machine: READY -> FIRING(cooldown) -> RELOADING.
 export function makeWeaponState(key) {
   const def = WEAPONS[key];

@@ -7,6 +7,7 @@ export const VEHICLE_TYPES = {
   gangbike:{ name: 'Outrider Bike',      hp: 60,  accel: 420, brake: 500, maxSpeed: 470, reverseMax: 80,  turnRate: 3.2, grip: 0.98,  handbrakeTurn: 2.4, r: 14, color: '#3f5c39', tail: '#ff8a3d' },
   truck:   { name: 'Shipment Hauler',    hp: 700, accel: 160, brake: 300, maxSpeed: 300, reverseMax: 60,  turnRate: 1.2, grip: 0.99,  handbrakeTurn: 1.2, r: 30, color: '#4a3c58', tail: '#ffca6b' },
   sedan:   { name: 'Commuter',           hp: 90,  accel: 220, brake: 420, maxSpeed: 300, reverseMax: 90,  turnRate: 2.0, grip: 0.985, handbrakeTurn: 1.6, r: 20, color: '#5a6a7a', tail: '#ff6a6a' },
+  armoured:{ name: 'Armoured Transport', hp: 1100,accel: 140, brake: 260, maxSpeed: 270, reverseMax: 50,  turnRate: 1.0, grip: 0.99,  handbrakeTurn: 1.0, r: 32, color: '#3a3f4d', tail: '#ffca6b' },
 };
 
 let nextVid = 1;

@@ -15,11 +15,22 @@ function hash(x, y, s = 0) {
 }
 
 const NEON = ['#31d3ff', '#ff4fd8', '#ffd94f', '#58d0ba', '#9dff57', '#ff8a3d'];
-const SIGNS = [
-  ['HALCYON', '#31d3ff'], ['GLOW⁰', '#9dff57'], ['NOODLE-24', '#ff8a3d'],
-  ['CREDIT NOW', '#ffd94f'], ['BAIL BONDS', '#ff4fd8'], ['QUICKCELL', '#58d0ba'],
-  ['PAWN + AMMO', '#ffd94f'], ['LIVE ODDS', '#ff4fd8'],
-];
+// Signage is per-venue: a storefront sells you things, a plant warns you about
+// them. Missions pick a set via `signage`; the joke in the industrial set is
+// that the safety placards are impeccable and the product is poison.
+const SIGN_SETS = {
+  street: [
+    ['HALCYON', '#31d3ff'], ['GLOW⁰', '#9dff57'], ['NOODLE-24', '#ff8a3d'],
+    ['CREDIT NOW', '#ffd94f'], ['BAIL BONDS', '#ff4fd8'], ['QUICKCELL', '#58d0ba'],
+    ['PAWN + AMMO', '#ffd94f'], ['LIVE ODDS', '#ff4fd8'],
+  ],
+  industrial: [
+    ['NO NAKED FLAME', '#ff5f5f'], ['LINE 3 — PRESSURISED', '#31d3ff'],
+    ['AUTHORISED ONLY', '#ffd94f'], ['WEAR RESPIRATOR', '#58d0ba'],
+    ['HALCYON PROCESS', '#31d3ff'], ['GLOW⁰ DECANT', '#9dff57'],
+    ['REPORT ALL SPILLS', '#ffd94f'], ['SAFETY IS EVERYONE', '#ff8a3d'],
+  ],
+};
 const CIV_OUTFITS = ['#8d95a8', '#a89b8d', '#7d96a0', '#a08d99', '#96a08d', '#9a8da8'];
 const SKINS = ['#e8c39e', '#c68e5f', '#8d5524', '#f1d5b8', '#a56a3f'];
 
@@ -63,7 +74,7 @@ export function draw(ctx, w, settings) {
   for (const pk of w.pickups) drawPickup(ctx, pk, now, fx);
 
   // 4) props (crates / shelves with damage states)
-  for (const pr of w.props) drawProp(ctx, pr);
+  for (const pr of w.props) drawProp(ctx, pr, settings, fx, now);
 
   // 4.5) reach zones + vehicles (under people, over floor)
   for (const z of w.zones ?? []) {
@@ -153,6 +164,10 @@ export function draw(ctx, w, settings) {
     }
     for (const f of w.effects) {
       if (f.kind === 'muzzle') radial(ctx, f.x, f.y, 130, hexA('#ffd98a', 0.22 * fx * (1 - f.t / f.dur)));
+      else if (f.kind === 'blast') radial(ctx, f.x, f.y, 320, hexA('#ff9a3d', 0.32 * fx * (1 - f.t / f.dur)));
+    }
+    for (const pr of w.props ?? []) {
+      if (pr.kind === 'vat' && pr.fuse == null) radial(ctx, pr.x, pr.y, 90, hexA('#9dff57', 0.05 * fx));
     }
     ctx.restore();
   }
@@ -210,8 +225,14 @@ function drawLighting(ctx, w, settings, fx, sx, sy, W, H, now) {
     if (e.boss && e.hp > 0) cut(e.x, e.y, 160, 0.65 + 0.2 * Math.sin(now / 300));
     else if (e.state === 'FIGHT') cut(e.x, e.y, 110, 0.55);
   }
+  for (const pr of w.props ?? []) {
+    if (pr.kind === 'vat') cut(pr.x, pr.y, pr.fuse != null ? 170 : 95, 0.65);
+  }
   if (!settings.reducedFlash) {
-    for (const f of w.effects) if (f.kind === 'muzzle') cut(f.x, f.y, 240, 1);
+    for (const f of w.effects) {
+      if (f.kind === 'muzzle') cut(f.x, f.y, 240, 1);
+      else if (f.kind === 'blast') cut(f.x, f.y, 430 * (1 - f.t / f.dur), 1);
+    }
   }
   ctx.drawImage(cache.light, 0, 0);
 }
@@ -396,9 +417,14 @@ function bakeStatic(w) {
         cache.lights.push({ kind: 'lamp', x: lx, y: ly, r: 130, color: '#ffc98a', w: 0 });
       }
 
-      // neon sign on south-facing walls
-      if (southOpen && hash(tx, ty, 21) > 0.62) {
-        const [text, color] = SIGNS[(hash(tx, ty, 22) * SIGNS.length) | 0];
+      // neon sign on south-facing walls — but never close enough to another
+      // sign to overprint it into gibberish (text is wider than one tile)
+      const sxTest = px + TILE / 2, syTest = py + TILE - 9;
+      const crowded = cache.lights.some((s) => s.kind === 'sign'
+        && Math.abs(s.y - syTest) < 6 && Math.abs(s.x - sxTest) < 120);
+      if (southOpen && !crowded && hash(tx, ty, 21) > 0.62) {
+        const signs = SIGN_SETS[w.mission.signage] ?? SIGN_SETS.street;
+        const [text, color] = signs[(hash(tx, ty, 22) * signs.length) | 0];
         const sx = px + TILE / 2, sy = py + TILE - 9;
         g.save();
         g.font = 'bold 9px "Segoe UI", sans-serif';
@@ -459,6 +485,8 @@ function styleFor(e, settings) {
     stacks: { outfit: '#4a4224', size: 1.5, head: 'bare', bulky: true },
     crane: { outfit: '#28394a', size: 1.28, head: 'cap', bulky: true },
     shiver: { outfit: '#1f4048', size: 1.06, head: 'hood' },
+    lockjaw: { outfit: '#2f3644', size: 1.4, head: 'chrome', bulky: true },
+    chemist: { outfit: '#9aa38c', size: 1.0, head: 'hood' }, // pale lab coat, toxic accent
   }[e.type] ?? { outfit: '#324a2e', size: 1, head: 'bare' };
   return {
     ...base,
@@ -694,16 +722,49 @@ function tag(ctx, text, x, y, color) {
 
 // ---------------------------------------------------------------- props & pickups
 
-function drawProp(ctx, pr) {
+function drawProp(ctx, pr, settings = {}, fx = 1, now = 0) {
   ctx.save();
   ctx.translate(pr.x, pr.y);
-  const maxHp = pr.kind === 'shelf' ? 90 : 60;
+  const maxHp = pr.kind === 'shelf' ? 90 : pr.kind === 'vat' ? 45 : 60;
   const dmg = pr.hp / maxHp;
   const r = pr.r;
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
   ctx.beginPath();
   ctx.ellipse(3, r * 0.5 + 3, r, r * 0.45, 0, 0, Math.PI * 2);
   ctx.fill();
+  if (pr.kind === 'vat') {
+    const lit = pr.fuse != null;
+    // a breached vat strobes red and screams; an intact one just glows toxic
+    const blink = lit && !settings.reducedFlash && Math.floor(now / 70) % 2 === 0;
+    if (!settings.reducedFlash) {
+      ctx.shadowColor = lit ? '#ff5f5f' : '#9dff57';
+      ctx.shadowBlur = (lit ? 24 : 12) * fx;
+    }
+    ctx.fillStyle = '#1b232e';
+    ctx.beginPath(); ctx.roundRect(-r, -r * 0.95, r * 2, r * 1.9, 5); ctx.fill();
+    ctx.shadowBlur = 0;
+    // liquid window
+    ctx.fillStyle = blink ? '#ffffff' : lit ? '#ff7a5f' : '#9dff57';
+    ctx.fillRect(-r * 0.5, -r * 0.55, r, r * 1.1);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(-r * 0.5, -r * 0.55, r * 0.3, r * 1.1);
+    // hazard collar
+    ctx.fillStyle = '#3a424e';
+    ctx.fillRect(-r, -r * 0.95, r * 2, 4);
+    ctx.fillRect(-r, r * 0.95 - 4, r * 2, 4);
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i % 2 ? '#ffd94f' : '#1b232e';
+      ctx.fillRect(-r + i * (r / 2), r * 0.95 - 4, r / 2, 4);
+    }
+    if (lit) tag(ctx, 'BREACHED', 0, -r - 10, '#ff5f5f');
+    else if (dmg < 0.7) {
+      ctx.strokeStyle = 'rgba(157,255,87,0.7)';
+      ctx.lineWidth = 1.4;
+      line(ctx, -r * 0.4, -r * 0.2, r * 0.3, r * 0.4);
+    }
+    ctx.restore();
+    return;
+  }
   if (pr.kind === 'barrier') {
     // concrete jersey barrier
     ctx.fillStyle = '#39414f';
@@ -940,6 +1001,26 @@ function drawEffect(ctx, f, settings, fx) {
       ctx.fillStyle = i % 2 ? '#6b573b' : '#4a3c28';
       ctx.fillRect(-3, -2, 6, 4);
       ctx.restore();
+    }
+  } else if (f.kind === 'blast') {
+    ctx.globalCompositeOperation = 'lighter';
+    // shockwave ring races out to the real blast radius so the danger reads true
+    const rr = t * 130;
+    ctx.strokeStyle = `rgba(255,225,150,${(1 - t) * 0.9})`;
+    ctx.lineWidth = 7 * (1 - t) + 1;
+    ctx.beginPath(); ctx.arc(0, 0, rr, 0, Math.PI * 2); ctx.stroke();
+    const core = Math.max(1, 74 * (1 - t));
+    const g3 = ctx.createRadialGradient(0, 0, 0, 0, 0, core);
+    g3.addColorStop(0, `rgba(255,255,225,${1 - t})`);
+    g3.addColorStop(0.45, `rgba(255,150,60,${(1 - t) * 0.85})`);
+    g3.addColorStop(1, 'transparent');
+    ctx.fillStyle = g3;
+    ctx.fillRect(-core, -core, core * 2, core * 2);
+    ctx.fillStyle = '#ffd94f';
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + f.x;
+      const er = t * 120;
+      ctx.fillRect(Math.cos(a) * er - 2, Math.sin(a) * er - 2 + t * t * 20, 4, 4);
     }
   } else if (f.kind === 'swing') {
     ctx.rotate(f.a);

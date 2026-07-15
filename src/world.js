@@ -4,7 +4,7 @@
 import { clamp, dist, angleTo, TAU, makeRng } from './core.js';
 import {
   WEAPONS, damageAtDistance, effectiveSpread, applyDamage,
-  makeWeaponState, canFire, fire, startReload, tickWeapon,
+  makeWeaponState, canFire, fire, startReload, tickWeapon, blastDamage,
 } from './combat.js';
 import {
   computeMorale, decideReaction, shouldBetray, isCuffable, tickCuff, searchSuspect,
@@ -64,6 +64,7 @@ export function createWorld(mission, opts) {
         case 'S': w.pickups.push({ id: id(), kind: 'weapon', weaponKey: 'stormcaster', x, y }); break;
         case 'm': w.pickups.push({ id: id(), kind: 'medkit', x, y }); break;
         case '=': w.props.push({ id: id(), kind: 'barrier', x, y, hp: Infinity, solid: true, r: 20 }); break;
+        case 'v': w.props.push({ id: id(), kind: 'vat', x, y, hp: 45, solid: true, r: 19, explosive: true, fuse: null, exploded: false }); break;
         case 'X': w.zones.push({ x, y, r: 80, tag: 'gate', done: false }); break;
       }
     });
@@ -283,7 +284,13 @@ export function updateWorld(w, dt, controlsBySlot) {
     endMission(w, 'failed');
   }
   w.effects = w.effects.filter((f) => (f.t += dt) < f.dur);
-  w.props = w.props.filter((pr) => pr.hp > 0);
+  // burn fuses on breached vats so chains cascade visibly instead of instantly
+  for (const pr of w.props) {
+    if (pr.fuse == null) continue;
+    pr.fuse -= dt;
+    if (pr.fuse <= 0) explodeProp(w, pr);
+  }
+  w.props = w.props.filter((pr) => pr.hp > 0 || pr.fuse != null);
 
   // Escalation event
   const clearObj = w.objectives.find((o) => o.id === 'clear');
@@ -727,6 +734,67 @@ function updateEnemy(w, e, dt) {
   if (e.ws.ammo === 0) startReload(e.ws);
 }
 
+// --- explosive props (GLOW vats) ---
+
+const BLAST_R = 130;
+const BLAST_PEAK = 95;
+// Ignition reaches further than the killzone: a rupturing tank breaches its
+// neighbours at ranges where a person two steps back walks away. Tuned so a
+// vat bank (3 tiles apart) cascades along its own row, while the aisles
+// between banks (4 tiles) stay firebreaks — one bank, not the whole room.
+const CHAIN_R = 150;
+
+function damageProp(w, pr, dmg) {
+  if (pr.hp <= 0 || dmg <= 0) return;
+  pr.hp -= dmg;
+  w.stats.propertyDamage += dmg;
+  if (pr.hp > 0) return;
+  pr.hp = 0;
+  if (pr.explosive) igniteProp(w, pr);
+  else w.effects.push({ kind: 'break', x: pr.x, y: pr.y, t: 0, dur: 0.4 });
+}
+
+// A breached vat hisses for a beat before it goes: long enough to read the
+// warning and run, short enough that a chain still reads as one event.
+function igniteProp(w, pr, delay = 0.45) {
+  if (pr.exploded || pr.fuse != null) return;
+  pr.fuse = delay;
+  pr.hp = 0;
+  if (delay >= 0.3) w.fx.alarm?.(); // primary breach warns; chain links don't spam
+}
+
+function explodeProp(w, pr) {
+  if (pr.exploded) return;
+  pr.exploded = true;
+  pr.fuse = null;
+  pr.hp = 0;
+  w.stats.propertyDamage += 60;
+  w.effects.push({ kind: 'blast', x: pr.x, y: pr.y, t: 0, dur: 0.55 });
+  w.fx.explosion?.(pr.x, pr.y);
+  w.cam.shake = Math.min(1.4, w.cam.shake + 0.55 * (w.settings?.screenShake ?? 1));
+
+  // cuffed suspects are prone and out of play; riders are shielded by the car
+  for (const t of [...w.enemies, ...w.civilians, ...w.players]) {
+    if (t.hp <= 0 || t.state === 'DEAD' || t.state === 'CUFFED') continue;
+    if (t.kind === 'player' && (t.downed || t.iframes > 0 || t.vehicleId != null)) continue;
+    const d = dist(pr.x, pr.y, t.x, t.y);
+    const dmg = blastDamage(BLAST_PEAK, d, BLAST_R);
+    if (dmg <= 0) continue;
+    const a = angleTo(pr.x, pr.y, t.x, t.y);
+    hitEntity(w, t, dmg, { lethal: true, kx: Math.cos(a) * 260, ky: Math.sin(a) * 260, fromPlayer: false });
+  }
+  for (const v of w.vehicles) {
+    if (v.disabled) continue;
+    const dmg = blastDamage(BLAST_PEAK * 1.6, dist(pr.x, pr.y, v.x, v.y), BLAST_R);
+    if (dmg > 0 && damageVehicle(v, dmg) === 'disabled') onVehicleDisabled(w, v, false);
+  }
+  // neighbours light their own fuses, so a bank of vats goes up in a run
+  for (const other of w.props) {
+    if (other === pr || !other.explosive) continue;
+    if (dist(pr.x, pr.y, other.x, other.y) < CHAIN_R) igniteProp(w, other, 0.18);
+  }
+}
+
 // --- vehicles ---
 
 function moveVehicle(w, v, dx, dy) {
@@ -737,7 +805,7 @@ function moveVehicle(w, v, dx, dy) {
     if (!blocked) {
       for (const pr of w.props) {
         if (pr.solid && pr.hp > 0 && dist(nx, ny, pr.x, pr.y) < v.r + pr.r - 8) {
-          if (pr.kind !== 'barrier' && Math.abs(v.speed) > 140) { pr.hp = 0; w.stats.propertyDamage += 40; w.effects.push({ kind: 'break', x: pr.x, y: pr.y, t: 0, dur: 0.4 }); }
+          if (pr.kind !== 'barrier' && Math.abs(v.speed) > 140) { damageProp(w, pr, Math.max(40, pr.hp)); }
           else blocked = true;
           break;
         }
@@ -926,11 +994,9 @@ function updateBullets(w, dt) {
       let consumed = false;
       for (const pr of w.props) {
         if (pr.hp > 0 && dist(b.x, b.y, pr.x, pr.y) < pr.r) {
-          const dmg = scaledDamage(b);
-          pr.hp -= dmg; w.stats.propertyDamage += dmg;
+          damageProp(w, pr, scaledDamage(b));
           b.life = 0; consumed = true;
           w.effects.push({ kind: 'debris', x: b.x, y: b.y, t: 0, dur: 0.3 });
-          if (pr.hp <= 0) w.effects.push({ kind: 'break', x: pr.x, y: pr.y, t: 0, dur: 0.4 });
           break;
         }
       }
