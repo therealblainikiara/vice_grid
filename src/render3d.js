@@ -84,6 +84,14 @@ function makeLabelSprite() {
   return s;
 }
 
+function shadeHex(hex, f) {
+  const n = parseInt(String(hex).slice(1), 16);
+  const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+  const g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+  const b = Math.min(255, Math.round((n & 255) * f));
+  return (r << 16) | (g << 8) | b;
+}
+
 function hash(x, y, s = 0) {
   let h = (x * 374761393 + y * 668265263 + s * 2246822519) >>> 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
@@ -640,58 +648,125 @@ function buildProp(pr) {
 
 // ---------------------------------------------------------------- vehicles
 
+// A car is read at a glance by its silhouette, so these are built from stacked
+// tapered volumes (lower body, greenhouse, nose, tail) rather than one box —
+// plus real rubber, bumpers and lights. Bikes get an entirely different shape.
 function buildVehicle(v) {
   const t = VEHICLE_TYPES[v.type];
   const g = new THREE.Group();
   const heavy = v.type === 'truck' || v.type === 'armoured';
-  const L = v.r * 2.3, W = v.r * 1.35, H = heavy ? 40 : 24;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(L, H, W),
-    new THREE.MeshStandardMaterial({ color: t.color, roughness: 0.45, metalness: 0.55 }));
-  body.position.y = H / 2 + 5; body.castShadow = true; body.receiveShadow = true;
-  g.add(body);
+  const bike = v.type === 'gangbike';
+  const L = v.r * 2.4, W = v.r * 1.4;
+  const paint = new THREE.MeshStandardMaterial({ color: t.color, roughness: 0.32, metalness: 0.65 });
+  const trim = new THREE.MeshStandardMaterial({ color: shadeHex(t.color, 0.55), roughness: 0.5, metalness: 0.5 });
 
-  if (heavy) {
-    const boxH = H + 14;
-    const cargo = new THREE.Mesh(new THREE.BoxGeometry(L * 0.6, boxH, W * 1.02),
-      new THREE.MeshStandardMaterial({ color: '#31384a', roughness: 0.6, metalness: 0.4 }));
-    cargo.position.set(-L * 0.16, boxH / 2 + 5, 0);
-    cargo.castShadow = true;
-    g.add(cargo);
+  if (bike) {
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(L * 0.8, 8, W * 0.42), paint);
+    frame.position.y = 16; frame.castShadow = true;
+    const tank = new THREE.Mesh(new THREE.CapsuleGeometry(5.5, 8, 3, 8), paint);
+    tank.rotation.z = Math.PI / 2; tank.position.set(-1, 23, 0); tank.castShadow = true;
+    const fairing = new THREE.Mesh(new THREE.ConeGeometry(6, 14, 8), paint);
+    fairing.rotation.z = -Math.PI / 2; fairing.position.set(L * 0.42, 22, 0);
+    const rider = new THREE.Mesh(new THREE.CapsuleGeometry(5, 12, 3, 8),
+      new THREE.MeshStandardMaterial({ color: '#1c2a20', roughness: 0.8 }));
+    rider.rotation.z = 0.5; rider.position.set(-4, 32, 0); rider.castShadow = true;
+    g.add(frame, tank, fairing, rider);
+    for (const wx of [-L * 0.38, L * 0.38]) {
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(9, 3, 8, 16), R.mat.tyre);
+      wheel.position.set(wx, 9, 0);
+      wheel.castShadow = true;
+      g.add(wheel);
+    }
+  } else if (heavy) {
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(L, 16, W), trim);
+    chassis.position.y = 14; chassis.castShadow = true;
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(L * 0.3, 30, W * 0.94), paint);
+    cab.position.set(L * 0.33, 37, 0); cab.castShadow = true;
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(2, 13, W * 0.78), R.mat.glass);
+    screen.position.set(L * 0.48, 42, 0);
+    const boxH = v.type === 'armoured' ? 46 : 42;
+    const cargo = new THREE.Mesh(new THREE.BoxGeometry(L * 0.66, boxH, W * 1.04),
+      new THREE.MeshStandardMaterial({ color: v.type === 'armoured' ? '#2b3040' : '#3a4258', roughness: 0.72, metalness: 0.3 }));
+    cargo.position.set(-L * 0.16, boxH / 2 + 22, 0); cargo.castShadow = true;
+    g.add(chassis, cab, screen, cargo);
+    // ribs break up the slab side of the box
+    for (let i = -2; i <= 2; i++) {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(3, boxH * 0.9, W * 1.07), trim);
+      rib.position.set(-L * 0.16 + i * L * 0.11, boxH / 2 + 22, 0);
+      g.add(rib);
+    }
+    if (v.type === 'armoured') { // slab bumper + window bars read as "armoured"
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(5, 18, W * 1.02), trim);
+      bar.position.set(L * 0.52, 26, 0); bar.castShadow = true;
+      g.add(bar);
+    }
   } else {
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(L * 0.44, 14, W * 0.86), R.mat.glass);
-    cabin.position.set(-L * 0.02, H + 10, 0);
-    g.add(cabin);
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(L, 15, W), paint);
+    lower.position.y = 15; lower.castShadow = true; lower.receiveShadow = true;
+    // greenhouse: narrower and shorter than the body, which is what makes a
+    // box look like a car instead of a brick
+    const green = new THREE.Mesh(new THREE.BoxGeometry(L * 0.46, 13, W * 0.8), paint);
+    green.position.set(-L * 0.04, 29, 0); green.castShadow = true;
+    const glassF = new THREE.Mesh(new THREE.BoxGeometry(L * 0.1, 12, W * 0.74), R.mat.glass);
+    glassF.position.set(L * 0.2, 29, 0);
+    const glassB = new THREE.Mesh(new THREE.BoxGeometry(L * 0.08, 11, W * 0.72), R.mat.glass);
+    glassB.position.set(-L * 0.28, 29, 0);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(L * 0.14, 9, W * 0.92), trim);
+    nose.position.set(L * 0.45, 13, 0);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(L * 0.1, 9, W * 0.92), trim);
+    tail.position.set(-L * 0.46, 13, 0);
+    g.add(lower, green, glassF, glassB, nose, tail);
   }
 
-  for (const [wx, wz] of [[-L * 0.32, -W * 0.55], [-L * 0.32, W * 0.55], [L * 0.3, -W * 0.55], [L * 0.3, W * 0.55]]) {
-    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 5, 12), R.mat.tyre);
-    wheel.rotation.x = Math.PI / 2;
-    wheel.position.set(wx, 7, wz);
-    wheel.castShadow = true;
-    g.add(wheel);
+  if (!bike) {
+    for (const [wx, wz] of [[-L * 0.31, -W * 0.52], [-L * 0.31, W * 0.52], [L * 0.31, -W * 0.52], [L * 0.31, W * 0.52]]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 6, 14), R.mat.tyre);
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(wx, 8, wz);
+      wheel.castShadow = true;
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 6.4, 10), trim);
+      hub.rotation.x = Math.PI / 2;
+      hub.position.set(wx, 8, wz);
+      g.add(wheel, hub);
+    }
   }
 
-  const hl = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 5),
-    new THREE.MeshStandardMaterial({ color: '#fff2ba', emissive: '#fff2ba', emissiveIntensity: 3 }));
-  hl.position.set(L / 2, 12, -W * 0.3);
-  const hl2 = hl.clone(); hl2.position.z = W * 0.3;
-  const tl = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 5),
-    new THREE.MeshStandardMaterial({ color: t.tail, emissive: t.tail, emissiveIntensity: 2.5 }));
-  tl.position.set(-L / 2, 12, -W * 0.3);
-  const tl2 = tl.clone(); tl2.position.z = W * 0.3;
-  g.add(hl, hl2, tl, tl2);
+  const lampY = heavy ? 26 : bike ? 22 : 14;
+  // Emissive is a bloom budget: lamps must read as lamps, not as white holes.
+  const hl = new THREE.Mesh(new THREE.BoxGeometry(2.5, 5, 6),
+    new THREE.MeshStandardMaterial({ color: '#fff2ba', emissive: '#fff2ba', emissiveIntensity: 1.4 }));
+  hl.position.set(L * 0.5, lampY, bike ? 0 : -W * 0.3);
+  g.add(hl);
+  if (!bike) {
+    const hl2 = hl.clone(); hl2.position.z = W * 0.3;
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(2.5, 4, 6),
+      new THREE.MeshStandardMaterial({ color: t.tail, emissive: t.tail, emissiveIntensity: 1.2 }));
+    tl.position.set(-L * 0.5, lampY, -W * 0.3);
+    const tl2 = tl.clone(); tl2.position.z = W * 0.3;
+    g.add(hl2, tl, tl2);
+  }
 
   let bar = null;
   if (v.type === 'patrol') {
-    bar = new THREE.Mesh(new THREE.BoxGeometry(6, 4, W * 0.8),
-      new THREE.MeshStandardMaterial({ color: '#31a8ff', emissive: '#31a8ff', emissiveIntensity: 4 }));
-    bar.position.set(-2, H + 18, 0);
+    // a proper lightbar: two pods on a spine, so it reads as police from above
+    bar = new THREE.Group();
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(4, 2.5, W * 0.72), R.mat.barrier);
+    const podL = new THREE.Mesh(new THREE.BoxGeometry(7, 5, W * 0.3),
+      new THREE.MeshStandardMaterial({ color: '#31a8ff', emissive: '#31a8ff', emissiveIntensity: 2.2 }));
+    podL.position.z = -W * 0.21;
+    const podR = new THREE.Mesh(new THREE.BoxGeometry(7, 5, W * 0.3),
+      new THREE.MeshStandardMaterial({ color: '#ff4040', emissive: '#ff4040', emissiveIntensity: 2.2 }));
+    podR.position.z = W * 0.21;
+    bar.add(spine, podL, podR);
+    bar.position.set(-L * 0.04, 38, 0);
+    bar.userData = { podL, podR };
     g.add(bar);
   }
   const tag = makeTagGroup();
   tag.position.y = 0;
   g.add(tag);
-  g.userData = { body, bar, tag };
+  // `paint` is per-vehicle, so recolouring a wreck cannot bleed onto others
+  g.userData = { paint, bar, tag };
   return g;
 }
 
@@ -881,12 +956,13 @@ function syncVehicles(w, settings, now) {
     if (v.tag && !v.disabled && v.hp < v.maxHp) {
       setHpBar(t, v.hp / v.maxHp, v.tag === 'truck' ? '#ffca6b' : '#ff8a3d', 74);
     } else { t.userData.hpBg.visible = false; t.userData.hpFill.visible = false; }
-    if (v.disabled) { g.rotation.z = 0.1; g.userData.body.material.color.setStyle('#2a2d36'); }
+    if (v.disabled) { g.rotation.z = 0.1; g.userData.paint.color.setStyle('#2a2d36'); }
     if (g.userData.bar) {
-      const phase = settings.reducedFlash ? 0 : Math.floor(now / 180) % 2;
-      g.userData.bar.material.color.set(phase ? '#ff4040' : '#31a8ff');
-      g.userData.bar.material.emissive.set(phase ? '#ff4040' : '#31a8ff');
-      g.userData.bar.material.emissiveIntensity = v.disabled ? 0 : 4;
+      // alternating pods, not a colour-cycling slab
+      const { podL, podR } = g.userData.bar.userData;
+      const phase = settings.reducedFlash ? 0.5 : (Math.floor(now / 170) % 2);
+      podL.material.emissiveIntensity = v.disabled ? 0 : (settings.reducedFlash ? 1 : (phase ? 0.15 : 2.6));
+      podR.material.emissiveIntensity = v.disabled ? 0 : (settings.reducedFlash ? 1 : (phase ? 2.6 : 0.15));
     }
   }
   for (const [id, g] of R.vehicles) {

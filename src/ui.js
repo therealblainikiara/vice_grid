@@ -4,11 +4,12 @@ import { WEAPONS } from './combat.js';
 import { SCORE } from './grading.js';
 import { summary } from './objectives.js';
 import { UPGRADE_DEFS } from './upgrades.js';
+import { ACTION_ORDER, ACTION_LABELS, codeLabel } from './input.js';
 
 const $ = (id) => document.getElementById(id);
 
 export function makeUI(settings, audio) {
-  const screens = ['title', 'menu', 'agent', 'briefing', 'pause', 'results', 'settings', 'credits', 'upgrade', 'missions'];
+  const screens = ['title', 'menu', 'agent', 'briefing', 'pause', 'results', 'settings', 'credits', 'upgrade', 'missions', 'controls'];
   let bannerTimer = null, subtitleTimer = null;
 
   function show(name) {
@@ -151,6 +152,7 @@ export function makeUI(settings, audio) {
       ['highContrastEnemies', 'High-contrast enemies', 'check'],
       ['reducedFlash', 'Reduce flashing', 'check'],
       ['retroFilter', 'Retro scanline filter', 'check'],
+      ['p1Gamepad', 'Player 1 uses a controller', 'check'],
       ['difficulty', 'Difficulty', 'select', ['rookie', 'agent', 'kingpin']],
     ];
     $('settings-body').innerHTML = defs.map(([key, label, kind, a, b]) => {
@@ -189,6 +191,48 @@ export function makeUI(settings, audio) {
     show('upgrade');
   }
 
+  // Rebinding panel. Each action shows up to 3 slots; clicking one listens for
+  // the next key / mouse button / wheel notch / pad button and takes it.
+  // `input` owns the binding data — the UI only renders and dispatches.
+  function buildControlsPanel(input, onChange) {
+    const render = () => {
+      const b = input.getBindings();
+      $('controls-body').innerHTML = ACTION_ORDER.map((a) => {
+        const slots = [0, 1, 2].map((i) => {
+          const code = b[a]?.[i];
+          return `<button class="bindbtn" data-act="${a}" data-slot="${i}" title="${code ? 'Click to change · right-click to clear' : 'Click to bind'}">${escapeHtml(code ? codeLabel(code) : '+')}</button>`;
+        }).join('');
+        return `<div class="uprow">
+          <div class="upinfo"><b>${escapeHtml(ACTION_LABELS[a] ?? a)}</b></div>
+          <div class="upctl">${slots}</div>
+        </div>`;
+      }).join('');
+      $('controls-body').querySelectorAll('.bindbtn').forEach((btn) => {
+        const act = btn.dataset.act, slot = +btn.dataset.slot;
+        btn.addEventListener('click', () => {
+          if (input.capturing) return;
+          btn.textContent = 'press…';
+          btn.classList.add('listening');
+          audio.uiMove();
+          input.beginCapture((code) => {
+            input.setBinding(act, slot, code);
+            onChange();
+            render();
+            audio.uiConfirm();
+          });
+        });
+        btn.addEventListener('contextmenu', (e) => {   // right-click clears
+          e.preventDefault();
+          input.clearBinding(act, slot);
+          onChange();
+          render();
+        });
+      });
+    };
+    $('btn-controls-reset').onclick = () => { input.resetBindings(); onChange(); render(); audio.uiConfirm(); };
+    render();
+  }
+
   // Mission replay list. rows: [{id, title, grade, locked}]
   function showMissionSelect(rows, onPick) {
     $('missions-body').innerHTML = rows.map((r) => `
@@ -202,7 +246,8 @@ export function makeUI(settings, audio) {
     show('missions');
   }
 
-  return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults, buildSettingsPanel, showUpgrade, showMissionSelect, liveScore };
+  return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults,
+    buildSettingsPanel, buildControlsPanel, showUpgrade, showMissionSelect, liveScore };
 }
 
 function escapeHtml(s) {

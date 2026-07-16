@@ -90,6 +90,37 @@ Perf after: ~12 ms/frame (84fps) at 720p on Iris Xe. 67 tests green.
   HARNESS LESSON: teleport-the-enemy is invalid for protect-objective missions;
   move the player instead.
 
+## Session-9: rebindable controls + vehicle models (user-requested)
+User: "gameplay is difficult with the current config" — wanted right-click to
+cuff, scroll to swap, arrow keys, a controller option, all editable in-game.
+- input.js rewritten around MULTI-BINDING: every action holds an array of
+  codes, so W and ArrowUp (or E and right-click) are one action, not rival
+  schemes. Code families: KeyX / MouseN / WheelUp|WheelDown / PadN|PadLT|PadRT.
+- New defaults: move = WASD **or arrows**; interact = **right-click** or E or
+  pad A; swap = **scroll** or Q or LB; aim/intimidate moved off RMB to **Shift**
+  (RMB had to be freed for interact — aim is a hold-to-pressure modifier, so
+  Shift is the natural home).
+- Wheel notches are instantaneous, so a notch is held ~90 ms: a frame-sampled
+  read cannot miss it and justPressed still fires exactly once.
+- Full controller support for P1 via the `p1Gamepad` setting (P2 then takes the
+  second pad). Pads emit no events, so rebinding polls them (input.pollCapture
+  runs each frame from main.js).
+- Settings → Controls screen: 13 actions x 3 slots, click-to-listen capture,
+  right-click to clear, restore-defaults. A code may only drive one action —
+  rebinding steals it from its previous owner.
+- VERIFIED in-browser: right-click cuffs, arrows move, scroll swaps, E still
+  cuffs, Shift aims; rebinding persists to localStorage; the steal rule works;
+  reset restores defaults.
+- SETTINGS SCHEMA CHANGE: settings.bindings went { action: "KeyW" } ->
+  { action: ["KeyW","ArrowUp"] }. Old saves are coerced (string -> [string]),
+  so no version bump and no data loss. New field: p1Gamepad (bool).
+- Vehicles rebuilt from stacked tapered volumes (lower body + narrower
+  greenhouse + nose/tail + hubbed wheels) instead of one box; bikes got their
+  own frame/tank/fairing/rider shape; heavies got a ribbed cargo box and the
+  armoured transport a slab bumper; patrol cars got a two-pod alternating
+  lightbar. Lamp emissives cut ~60% — bloom is a budget, and lamps were
+  blowing out into white holes (same mistake as the signs in session 8).
+
 ## MEASUREMENT GOTCHA (cost me a false negative)
 Reading `getComputedStyle(el).opacity` on an element with a CSS transition
 returns the mid-tween value, so a just-set target reads ~0 and looks broken.

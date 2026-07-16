@@ -74,7 +74,8 @@ export const DEFAULT_SETTINGS = {
   speakerLabels: true, highContrastEnemies: false, colorMode: 'default',
   reducedFlash: false, gameSpeed: 1.0, difficulty: 'agent',
   retroFilter: false,
-  bindings: null, // null = defaults from input.js
+  p1Gamepad: false,   // Player 1 drives with a controller instead of kb+mouse
+  bindings: null,     // null = defaults from input.js; else { action: [code,...] }
 };
 
 export function loadSettings(storage) {

@@ -214,6 +214,9 @@ ui.buildSettingsPanel((key) => {
   if (key === 'retroFilter') applyRetroFilter();
   persistSettings();
 });
+ui.buildControlsPanel(input, persistSettings);
+on('btn-controls', () => { state = 'controls'; ui.show('controls'); });
+on('btn-controls-back', () => { state = 'settings'; ui.show('settings'); });
 
 function resumeFromPause() { state = 'play'; ui.show(null); }
 
@@ -265,6 +268,7 @@ function render(w) {
 function frame(now) {
   const raw = Math.min(0.1, (now - last) / 1000);
   last = now;
+  input.pollCapture(); // gamepads emit no events; rebinding must poll them
 
   if (state === 'play' && world) {
     // adjustable game speed applies to single player only (accessibility)
