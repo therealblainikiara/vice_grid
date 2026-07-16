@@ -20,7 +20,23 @@ const use3d = (() => {
   try { return !!canvas.getContext('webgl2'); } catch { return false; }
 })();
 const ctx = use3d ? null : canvas.getContext('2d');
-const storage = window.localStorage;
+// Sandboxed hosts can throw on localStorage ACCESS, not just on writes — probe
+// it and fall back to session memory so the demo boots anywhere.
+const storage = (() => {
+  try {
+    const s = window.localStorage;
+    s.setItem('__vg_probe', '1');
+    s.removeItem('__vg_probe');
+    return s;
+  } catch {
+    const m = new Map();
+    return {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      setItem: (k, v) => m.set(k, String(v)),
+      removeItem: (k) => m.delete(k),
+    };
+  }
+})();
 
 const settings = loadSettings(storage);
 const store = makeSaveStore(storage);

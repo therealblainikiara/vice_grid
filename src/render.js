@@ -485,8 +485,6 @@ function styleFor(e, settings) {
     stacks: { outfit: '#4a4224', size: 1.5, head: 'bare', bulky: true },
     crane: { outfit: '#28394a', size: 1.28, head: 'cap', bulky: true },
     shiver: { outfit: '#1f4048', size: 1.06, head: 'hood' },
-    lockjaw: { outfit: '#2f3644', size: 1.32, head: 'bare', bulky: true },
-    chemist: { outfit: '#9aa38c', size: 1.1, head: 'cap' },
     cs_trooper: { outfit: '#4a3c22', size: 1.0, head: 'cap' },
     cs_tactical: { outfit: '#52401f', size: 1.05, head: 'cap' },
     cs_shield: { outfit: '#5a4826', size: 1.16, head: 'cap', bulky: true },
