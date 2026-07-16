@@ -734,6 +734,15 @@ export function draw3d(canvas, w, settings) {
   syncZones(w, now);
   syncCompass(w, now);
 
+  // damage vignette (CSS overlay: a WebGL canvas cannot be painted over)
+  if (R.hurtEl === undefined) R.hurtEl = document.getElementById('hurt');
+  if (R.hurtEl) {
+    const hurt = Math.max(0, ...w.players.map((p) => p.hitFlash ?? 0));
+    const allDown = w.players.length > 0 && w.players.every((p) => p.downed);
+    R.hurtEl.style.opacity = settings.reducedFlash ? 0
+      : allDown ? 0.5 : Math.min(0.8, (hurt / 0.12) * 0.7);
+  }
+
   R.bloom.strength = (settings.reducedFlash ? 0.35 : 0.7) * fx;
   R.composer.render();
 }

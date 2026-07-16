@@ -72,7 +72,28 @@ render3d.js feature by feature. Six further regressions found and fixed:
    aim and folds flat (rotation.z) when downed, flinging labels onto the floor
    beside bodies. Tags now live in their own non-rotating world-space group.
 Perf after: ~12 ms/frame (84fps) at 720p on Iris Xe. 67 tests green.
-STILL OUTSTANDING (2D had, 3D lacks): player-hurt red vignette.
+
+### Session-8d: parity COMPLETE + full 3D campaign re-verification
+- Player-hurt vignette restored as a CSS overlay (#hurt in index.html), driven
+  per-frame by render3d from player hitFlash — a WebGL canvas cannot be
+  painted over the way the 2D one was. Verified: 0 idle -> 0.60 on hit -> 0
+  recovered -> 0 under Reduce Flashing -> steady 0.5 while downed.
+  RENDERER PARITY WITH THE 2D BUILD IS NOW COMPLETE.
+- Full campaign re-run in 3D (the previous full E2E predated the rewrite):
+  m01 A, m02 A, m04 A, m05 C, m08 A — all won, all bosses ARRESTED.
+- m06 "failed" in the batch harness. Investigated: NOT a game regression. The
+  harness teleports armed suspects to the player, which drags them across
+  apartment floors full of residents and gets the residents shot — precisely
+  what m06's primary protect objective exists to punish. Re-run walking the
+  PLAYER to the suspects instead: 0 civilian strikes. Session 6 already proved
+  m06 completes legitimately (SHIVER arrested, 2 strikes, grade B).
+  HARNESS LESSON: teleport-the-enemy is invalid for protect-objective missions;
+  move the player instead.
+
+## MEASUREMENT GOTCHA (cost me a false negative)
+Reading `getComputedStyle(el).opacity` on an element with a CSS transition
+returns the mid-tween value, so a just-set target reads ~0 and looks broken.
+Assert against `el.style.opacity` (the target) instead.
 
 ## Session-7: Act 2 closes (m07, m08) + explosive hazards (browser-verified)
 - EXPLOSIVE PROPS: map char 'v' = pressurised GLOW vat (hp 45, solid).

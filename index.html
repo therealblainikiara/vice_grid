@@ -90,6 +90,13 @@
   #scorebox { position: absolute; bottom: 14px; right: 14px; background: var(--panel); border: 1px solid rgba(245,234,211,.16); border-radius: 6px; padding: 8px 16px; font-size: 1.05rem; color: var(--gold); letter-spacing: .1em; }
   #log { position: absolute; bottom: 14px; left: 14px; font-size: .78rem; color: #cfc9ba; max-width: 380px; }
   #log div { background: rgba(5,7,10,.66); padding: 2px 8px; border-radius: 4px; margin-top: 3px; }
+  /* Damage vignette. The 2D renderer painted this onto the canvas; with a
+     WebGL context that is no longer possible, so it becomes a CSS overlay. */
+  #hurt {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 4;
+    background: radial-gradient(ellipse at center, transparent 42%, rgba(255,30,30,.75) 100%);
+    transition: opacity .09s linear;
+  }
   #banner {
     position: absolute; top: 22%; left: 50%; transform: translateX(-50%) scale(.9);
     font-size: 2rem; letter-spacing: .3em; color: var(--red); font-weight: 700;
@@ -120,6 +127,7 @@
     <div id="log"></div>
     <div id="banner"></div>
     <div id="subtitle"></div>
+    <div id="hurt"></div>
   </div>
 
   <section class="screen active" id="screen-title">
