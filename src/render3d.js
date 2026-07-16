@@ -425,11 +425,13 @@ function styleFor(e, settings) {
     bouncer: '#1f3a33', vipguard: '#274044', chromedog: '#3a4a24', midnight: '#2c1f45',
     tread: '#4a3520', stacks: '#4a4224', crane: '#28394a', shiver: '#1f4048',
     lockjaw: '#2f3644', chemist: '#9aa38c',
+    cs_trooper: '#4a3c22', cs_tactical: '#52401f', cs_shield: '#5a4826', graft: '#5e4a24',
+    wrecker: '#46321e',
   }[e.type] ?? '#324a2e';
-  const big = ['bruiser', 'bouncer', 'chromedog', 'stacks', 'lockjaw', 'tread'].includes(e.type);
+  const big = ['bruiser', 'bouncer', 'chromedog', 'stacks', 'lockjaw', 'tread', 'cs_shield', 'wrecker'].includes(e.type);
   return { accent: hc ? '#ff5050' : e.color, outfit: hc ? '#5a2323' : base,
     skin: SKINS[e.id % SKINS.length], scale: e.boss ? 1.3 : big ? 1.18 : 1.0, visor: false,
-    emissive: e.boss ? 0.9 : 0.35 };
+    emissive: e.boss ? 0.9 : 0.35, shield: !!e.shield };
 }
 
 function buildHumanoid(st) {
@@ -474,6 +476,25 @@ function buildHumanoid(st) {
     new THREE.MeshStandardMaterial({ color: '#12161f', roughness: 0.5, metalness: 0.7 }));
   gun.position.set(14, 25, 4); gun.castShadow = true;
   g.add(gun);
+
+  let shieldMesh = null;
+  if (st.shield) {
+    // the riot shield IS the mechanic's affordance: see it, flank it
+    shieldMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(2.5, 34, 22),
+      new THREE.MeshStandardMaterial({
+        color: '#8a6f30', emissive: st.accent, emissiveIntensity: 0.35,
+        roughness: 0.4, metalness: 0.5, transparent: true, opacity: 0.92,
+      }),
+    );
+    shieldMesh.position.set(13, 22, 0);
+    shieldMesh.castShadow = true;
+    g.add(shieldMesh);
+    // slit window so it reads as equipment, not a wall
+    const slit = new THREE.Mesh(new THREE.BoxGeometry(3, 5, 12), R.mat.glass);
+    slit.position.set(13.4, 32, 0);
+    g.add(slit);
+  }
 
   g.userData = { torso, head, legL, legR, armL, armR, gun, stripe, accent,
     baseEmissive: st.emissive ?? 0.4 };

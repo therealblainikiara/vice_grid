@@ -36,6 +36,12 @@ export const ENEMY_TYPES = {
   shiver:   { hp: 320, speed: 175, weapon: 'smg',     personality: 'sly',    color: '#a0f0ff', score: 'boss', armor: 0.15, boss: true },
   lockjaw:  { hp: 460, speed: 125, weapon: 'shotgun', personality: 'hard',   color: '#8fa4c0', score: 'boss', armor: 0.4,  boss: true },
   chemist:  { hp: 260, speed: 150, weapon: 'smg',     personality: 'sly',    color: '#b6ff4f', score: 'boss', armor: 0.05, boss: true },
+  // Civic Shield — the corrupt private force. Amber colour-coding.
+  cs_trooper:  { hp: 65,  speed: 150, weapon: 'pistol',  personality: 'timid', color: '#ffb830', score: 'gunman' },
+  cs_tactical: { hp: 80,  speed: 160, weapon: 'smg',     personality: 'hard',  color: '#ffa53d', score: 'gunman', armor: 0.1 },
+  cs_shield:   { hp: 120, speed: 110, weapon: 'pistol',  personality: 'hard',  color: '#ffc95e', score: 'gunman', armor: 0.1, shield: true },
+  graft:    { hp: 480, speed: 115, weapon: 'shotgun', personality: 'hard',   color: '#ffd080', score: 'boss', armor: 0.3, boss: true, shield: true },
+  wrecker:  { hp: 400, speed: 150, weapon: 'shotgun', personality: 'hard',   color: '#ff8f4d', score: 'boss', armor: 0.3, boss: true },
 };
 
 // Full campaign skeleton. `implemented` gates mission select during development;
@@ -53,8 +59,8 @@ export const CAMPAIGN = [
   { id: 'm08', act: 2, n: 8, title: 'The Glow Kitchen', type: 'main', implemented: true },
   { id: 'op3', act: 2, n: 0, title: 'OP: Dockside Score Attack', type: 'op', implemented: false },
   { id: 'op4', act: 2, n: 0, title: 'OP: Witness Escort', type: 'op', implemented: false },
-  { id: 'm09', act: 3, n: 9, title: 'Precinct Siege', type: 'main', implemented: false },
-  { id: 'm10', act: 3, n: 10, title: 'Evidence Run', type: 'main', implemented: false },
+  { id: 'm09', act: 3, n: 9, title: 'Precinct Siege', type: 'main', implemented: true },
+  { id: 'm10', act: 3, n: 10, title: 'Evidence Run', type: 'main', implemented: true },
   { id: 'm11', act: 3, n: 11, title: 'Blackout', type: 'main', implemented: false },
   { id: 'm12', act: 3, n: 12, title: 'Signal Tower', type: 'main', implemented: false },
   { id: 'op5', act: 3, n: 0, title: 'OP: Rooftop Sweep', type: 'op', implemented: false },
@@ -621,6 +627,140 @@ MISSIONS.m08 = {
     rowFill(19, '#'); rect(16, 19, 4, 1, '.');
     rowFill(20, '.'); rowFill(21, '.'); rowFill(22, ',');
     set(3, 21, 'P'); set(30, 21, 'm'); set(27, 21, 'p');
+  }),
+};
+
+MISSIONS.m09 = {
+  id: 'm09',
+  title: 'M09 — PRECINCT SIEGE',
+  parSec: 540,
+  enemyPool: ['cs_trooper', 'cs_trooper', 'cs_tactical', 'cs_tactical', 'cs_shield'],
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Act Three, Grid, and the gloves are off. The Halcyon contract you seized names Civic Shield procurement — and tonight Civic Shield is answering.',
+      'They are raiding the mothballed 9th Precinct. Our precinct. Everything we have built since the QuickCell — every cuffed name, every ledger — is in that evidence store.',
+      'These are not street dealers. Trained units, riot shields. A shield takes everything you throw at its front — flank it, get behind it, or introduce it to RHINO\'s shoulder.',
+      'Their ground commander is CAPTAIN GRAFT. Twenty-two years of service and a second salary. He carries a shield too. Take him ALIVE if you can — a captain\'s testimony breaks this city open.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The 9th holds. The evidence store holds. And half of Civic Shield\'s night shift is cuffed in their own riot vans.',
+      'Internal-affairs files from the records room name the officers on Halcyon\'s books. We move the evidence downtown tomorrow — and Grid, they know we have to.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['They torched the store. Months of names, gone. Take the precinct back.'] },
+  objectives: [
+    { id: 'clear', label: 'Repel the Civic Shield raid', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
+    { id: 'boss', label: 'Take down CAPTAIN GRAFT', primary: true, type: 'boss' },
+    { id: 'cuffs', label: 'Optional: Arrest 4 raiders', primary: false, type: 'arrest', count: 4 },
+    { id: 'civs', label: 'Optional: Keep the clerks safe (1 strike allowed)', primary: false, type: 'protect', count: 1 },
+    { id: 'ledger', label: 'Optional: Secure the internal-affairs files', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'SECOND WAVE BREACHES THE LOBBY',
+    spawns: [
+      { type: 'cs_shield', x: 15, y: 19 }, { type: 'cs_tactical', x: 17, y: 19 },
+      { type: 'cs_shield', x: 19, y: 19 }, { type: 'cs_trooper', x: 16, y: 20 },
+    ],
+  },
+  boss: {
+    type: 'graft', x: 17, y: 18, name: 'CAPTAIN GRAFT',
+    intro: 'CAPTAIN GRAFT: "Twenty-two years I kept this city quiet. You two are just noise."',
+    phase2At: 0.5, phase2Banner: 'GRAFT CALLS HIS PERSONAL DETAIL',
+    phase2Spawns: [{ type: 'cs_shield', x: 14, y: 18 }, { type: 'cs_tactical', x: 20, y: 18 }],
+    surrenderAt: 0.15,
+  },
+  map: buildMap(34, 22, ({ set, rect, rowFill }) => {
+    // records room (NW), evidence store (NE), offices between
+    rowFill(6, '#');
+    rect(8, 6, 3, 1, '.'); rect(24, 6, 3, 1, '.');   // two doors through
+    rect(11, 1, 1, 5, '#'); rect(22, 1, 1, 5, '#');  // room dividers
+    set(3, 2, 'V'); set(30, 2, 'V');                  // IA files + evidence log
+    rect(2, 3, 2, 2, 's'); rect(30, 3, 2, 2, 's');
+    set(6, 3, 'E'); set(27, 3, 'E');
+    set(15, 2, 'm'); set(18, 2, 'p');
+    // bullpen: desks as cover, clerks sheltering
+    for (const [cx, cy] of [[6, 9], [12, 9], [20, 9], [26, 9], [9, 13], [16, 13], [23, 13]]) { set(cx, cy, 'c'); set(cx + 2, cy, 'c'); }
+    set(4, 11, 'C'); set(29, 11, 'C'); set(13, 15, 'C'); set(21, 15, 'C');
+    set(8, 10, 'E'); set(18, 10, 'E'); set(28, 10, 'E');
+    set(6, 14, 'E'); set(15, 14, 'E'); set(25, 14, 'E');
+    set(11, 16, 'E'); set(23, 16, 'E');
+    // lobby + street: the breach comes from the south
+    rowFill(17, '#');
+    rect(14, 17, 7, 1, '.');                          // shattered lobby doors
+    rowFill(20, ',');
+    set(4, 19, 'P'); set(30, 19, 'w');
+  }),
+};
+
+MISSIONS.m10 = {
+  id: 'm10',
+  title: 'M10 — EVIDENCE RUN',
+  parSec: 330,
+  convoyGoal: 'protect',
+  playerVehicle: { type: 'patrol', x: 9, y: 10 },
+  vehicles: [
+    { type: 'truck',   x: 5,  y: 10, tag: 'truck',  ai: 'convoy', cruise: 160 },
+    { type: 'gangcar', x: 30, y: 8,  tag: 'raider', ai: 'escort', cruise: 280 },
+    { type: 'gangcar', x: 34, y: 11, tag: 'raider', ai: 'escort', cruise: 280 },
+    { type: 'gangbike', x: 38, y: 9, tag: 'raider', ai: 'escort', cruise: 340 },
+    { type: 'gangbike', x: 38, y: 12, tag: 'raider', ai: 'escort', cruise: 340 },
+  ],
+  traffic: { rows: [3, 5], eastRows: [], rate: 3.2, max: 3 },
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Everything the 9th holds goes downtown tonight in one armoured van, and every crook in Cobalt knows the route.',
+      'You are the escort. Glowline raiders will hit the van, not you — keep their runners off it, body-block for it, be the wall.',
+      'The van driver is a records clerk named Petra doing the bravest thing of her life. She does not stop for anything. Do not let anything make her.',
+      'Word is the syndicate hired THE WRECKER — the ram-car king of the east docks. If his rig shows up, stop it before it reaches Petra.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Van is in the underground dock and Petra is asking if she qualifies for a badge. Honestly, Grid, she might.',
+      'With the evidence secured downtown, the prosecutor can move. Which means the city\'s dirty half must move first — watch the lights tonight.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The van is burning on the boulevard. Everything we had was in it. Run it back — Petra deserves better.'] },
+  objectives: [
+    { id: 'van', label: 'Deliver the evidence van intact', primary: true, type: 'reach', tag: 'delivered' },
+    { id: 'boss', label: 'Stop THE WRECKER', primary: true, type: 'boss' },
+    { id: 'clear', label: 'Optional: Disable the raider screen', primary: false, type: 'neutralize', count: 4, tag: 'raider' },
+    { id: 'cuffs', label: 'Optional: Arrest 2 suspects', primary: false, type: 'arrest', count: 2 },
+    { id: 'civs', label: 'Optional: Keep commuters clear (1 strike allowed)', primary: false, type: 'protect', count: 1 },
+  ],
+  escalation: {
+    at: 2,           // aggressive escorts meet him early…
+    atVanFrac: 0.3,  // …but the ambush point catches everyone else
+    banner: 'THE WRECKER JOINS THE HUNT',
+    spawns: [],
+    vehicles: [
+      { type: 'armoured', x: 8, y: 10, tag: 'wrecker', ai: 'escort', cruise: 300 },
+    ],
+  },
+  boss: {
+    type: 'wrecker', x: 100, y: 10, trigger: 'wrecker', name: 'THE WRECKER',
+    intro: 'THE WRECKER: "Nine hundred wrecks and never a scratch on me. Climb out and make it nine-oh-one."',
+    phase2At: 0.5, phase2Banner: 'THE WRECKER TEARS OFF HIS DOOR AS A SHIELD',
+    phase2Spawns: [],
+    surrenderAt: 0.2,
+  },
+  map: buildMap(132, 16, ({ set, rect, rowFill }) => {
+    rowFill(1, ','); rowFill(2, ',');
+    rowFill(3, '~'); rowFill(4, '~'); rowFill(5, '~');
+    rowFill(6, '=');
+    for (let x = 10; x < 130; x += 18) set(x, 6, '~');
+    rowFill(7, '~'); rowFill(8, '~'); rowFill(9, '~');
+    rowFill(10, '~'); rowFill(11, '~'); rowFill(12, '~');
+    rowFill(13, ','); rowFill(14, ',');
+    set(9, 12, 'P');
+    for (let x = 16; x < 130; x += 31) { set(x, 1, 'c'); set(x + 4, 14, 'c'); }
   }),
 };
 

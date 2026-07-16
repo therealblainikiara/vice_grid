@@ -1,7 +1,7 @@
 // world.js — the simulation: level parsing, players, AI, bullets, missions.
 // No DOM access; rendering reads this state, main.js drives update ticks.
 
-import { clamp, dist, angleTo, TAU, makeRng } from './core.js';
+import { clamp, dist, angleTo, angleDiff, TAU, makeRng } from './core.js';
 import {
   WEAPONS, damageAtDistance, effectiveSpread, applyDamage,
   makeWeaponState, canFire, fire, startReload, tickWeapon, blastDamage,
@@ -31,6 +31,7 @@ export function createWorld(mission, opts) {
     walls: new Set(), roads: new Set(),
     players: [], enemies: [], civilians: [], bullets: [], pickups: [], props: [], effects: [],
     vehicles: [], zones: [], trafficTimer: 0, truckDown: false,
+    vehicleDownTags: new Set(), delivered: false,
     objectives: createObjectives(mission.objectives),
     stats: {
       timeSec: 0, parSec: mission.parSec, arrests: 0, kills: 0, downs: 0,
@@ -56,7 +57,7 @@ export function createWorld(mission, opts) {
         case 'c': w.props.push({ id: id(), kind: 'crate', x, y, hp: 60, solid: true, r: 20 }); break;
         case 's': w.props.push({ id: id(), kind: 'shelf', x, y, hp: 90, solid: true, r: 22 }); break;
         case 'P': w.spawnPoints.push({ x, y }); break;
-        case 'E': w.enemies.push(makeEnemy(pickEnemy(rng), x, y, w)); break;
+        case 'E': w.enemies.push(makeEnemy(pickEnemy(rng, mission.enemyPool), x, y, w)); break;
         case 'C': w.civilians.push(makeCivilian(x, y)); w.stats.civiliansTotal++; break;
         case 'V': w.pickups.push({ id: id(), kind: 'evidence', x, y }); w.stats.evidenceTotal++; break;
         case 'w': w.pickups.push({ id: id(), kind: 'weapon', weaponKey: rng.chance(0.5) ? 'shotgun' : 'smg', x, y }); break;
@@ -103,8 +104,9 @@ function diffMods(d) {
   return { enemyDmg: 1, enemyHp: 1, aggro: 1 }; // 'agent'
 }
 
-function pickEnemy(rng) {
-  return rng.pick(['lookout', 'soldier', 'soldier', 'dealer', 'dealer', 'bruiser']);
+// Missions override the default street-gang pool (weights = repetition).
+function pickEnemy(rng, pool) {
+  return rng.pick(pool ?? ['lookout', 'soldier', 'soldier', 'dealer', 'dealer', 'bruiser']);
 }
 
 function makeEnemy(typeKey, x, y, w) {
@@ -114,7 +116,7 @@ function makeEnemy(typeKey, x, y, w) {
     id: id(), kind: 'enemy', type: typeKey, tag: t.score, boss: !!t.boss,
     x, y, vx: 0, vy: 0, hp, maxHp: hp, armor: t.armor ?? 0, speed: t.speed,
     color: t.color, personality: t.personality,
-    ws: makeWeaponState(t.weapon), aimAngle: 0,
+    ws: makeWeaponState(t.weapon), aimAngle: 0, shield: !!t.shield,
     state: 'IDLE', stateTime: 0, moraleTimer: 1 + Math.random(),
     cuffProgress: 0, searched: false, carriesIntel: Math.random() < 0.35,
     stunTimer: 0, hitFlash: 0, wanderA: Math.random() * TAU,
@@ -230,6 +232,7 @@ function saveCheckpoint(w) {
     enemies: w.enemies, civilians: w.civilians, pickups: w.pickups,
     props: w.props.filter((pr) => pr.hp !== Infinity ? true : true),
     vehicles: w.vehicles, zones: w.zones, truckDown: w.truckDown,
+    vehicleDownTags: w.vehicleDownTags, delivered: w.delivered,
     objectives: w.objectives, stats: w.stats,
     escalated: w.escalated, bossSpawned: w.bossSpawned,
   });
@@ -240,6 +243,7 @@ export function restoreCheckpoint(w) {
   const c = structuredClone(w.checkpoint);
   w.enemies = c.enemies; w.civilians = c.civilians; w.pickups = c.pickups; w.props = c.props;
   w.vehicles = c.vehicles ?? []; w.zones = c.zones ?? []; w.truckDown = c.truckDown ?? false;
+  w.vehicleDownTags = c.vehicleDownTags ?? new Set(); w.delivered = c.delivered ?? false;
   w.objectives = c.objectives; w.stats = c.stats;
   w.escalated = c.escalated; w.bossSpawned = c.bossSpawned;
   w.boss = w.enemies.find((e) => e.boss) ?? null;
@@ -277,11 +281,23 @@ export function updateWorld(w, dt, controlsBySlot) {
     }
   }
 
-  // pursuit pressure: the shipment escaping ends the mission
+  // Convoy endgame — the same edge means opposite things per mission:
+  // pursuit ('stop'): the shipment escaping ends the run in failure;
+  // escort ('protect'): the van arriving is the delivery objective.
   const truck = w.vehicles.find((v) => v.tag === 'truck');
   if (truck && !truck.disabled && truck.x > w.cols * TILE - 90) {
-    w.fx.banner?.('THE SHIPMENT GOT AWAY');
-    endMission(w, 'failed');
+    if (w.mission.convoyGoal === 'protect') {
+      if (!w.delivered) {
+        w.delivered = true;
+        truck.ai = null; truck.speed = 0;
+        objEvent(w, { type: 'reached', tag: 'delivered' });
+        w.fx.banner?.('EVIDENCE DELIVERED');
+        saveCheckpoint(w);
+      }
+    } else {
+      w.fx.banner?.('THE SHIPMENT GOT AWAY');
+      endMission(w, 'failed');
+    }
   }
   w.effects = w.effects.filter((f) => (f.t += dt) < f.dur);
   // burn fuses on breached vats so chains cascade visibly instead of instantly
@@ -295,7 +311,14 @@ export function updateWorld(w, dt, controlsBySlot) {
   // Escalation event
   const clearObj = w.objectives.find((o) => o.id === 'clear');
   const esc = w.mission.escalation;
-  if (esc && !w.escalated && clearObj && clearObj.progress >= esc.at) {
+  // Escalation triggers on crew progress (at) OR on the convoy passing the
+  // ambush point (atVanFrac) — whichever comes first. A defensive escort that
+  // never engages the screen must still meet the ambush, or the primary boss
+  // objective can soft-lock.
+  const escByCrew = esc && esc.at != null && clearObj && clearObj.progress >= esc.at;
+  const escByRoute = esc && esc.atVanFrac != null && truck && !truck.disabled
+    && truck.x > w.cols * TILE * esc.atVanFrac;
+  if (esc && !w.escalated && (escByCrew || escByRoute)) {
     w.escalated = true;
     for (const s of esc.spawns) w.enemies.push(alertEnemy(makeEnemy(s.type, s.x * TILE + TILE / 2, s.y * TILE + TILE / 2, w)));
     for (const vd of esc.vehicles ?? []) {
@@ -312,11 +335,16 @@ export function updateWorld(w, dt, controlsBySlot) {
 
   // Boss spawn: after the crew objective, or when the shipment truck is stopped
   const bossDef = w.mission.boss;
-  const bossReady = bossDef?.trigger === 'truck' ? w.truckDown : clearObj?.done;
+  // trigger names a vehicle tag (m03/m07 'truck', m10 'wrecker'); default is
+  // the crew objective. The boss climbs out of whichever wreck triggered him.
+  const bossReady = bossDef?.trigger
+    ? w.vehicleDownTags.has(bossDef.trigger)
+    : clearObj?.done;
   if (bossDef && !w.bossSpawned && bossReady) {
     w.bossSpawned = true;
-    const bx = bossDef.trigger === 'truck' && truck ? truck.x / TILE : bossDef.x;
-    const by = bossDef.trigger === 'truck' && truck ? truck.y / TILE : bossDef.y;
+    const wreck = bossDef.trigger ? w.vehicles.find((v) => v.tag === bossDef.trigger && v.disabled) : null;
+    const bx = wreck ? wreck.x / TILE : bossDef.x;
+    const by = wreck ? wreck.y / TILE : bossDef.y;
     const b = makeEnemy(bossDef.type, bx * TILE + TILE / 2, by * TILE + TILE / 2, w);
     b.name = bossDef.name;
     w.boss = alertEnemy(b);
@@ -855,11 +883,13 @@ function updateVehicles(w, dt) {
         if (pv && Math.abs(pv.x - v.x) < 320) targetY = pv.y;
         else if (truck) targetY = truck.laneY + (v.id % 2 ? 60 : -60);
         c = { throttle: v.speed < v.cruise * 1.15 ? 0.9 : 0, steer: clamp((targetY - v.y) * 0.02, -1, 1) - clamp(v.angle, -0.7, 0.7), handbrake: false };
-        // drive-by fire at the player's car
+        // drive-by fire: raiders in an escort mission gun for the van,
+        // pursuit-mission escorts gun for the interceptor
+        const quarry = (w.mission.convoyGoal === 'protect' && truck && !truck.disabled) ? truck : pv;
         v.shotTimer = (v.shotTimer ?? 1.5) - dt;
-        if (pv && v.shotTimer <= 0 && dist(v.x, v.y, pv.x, pv.y) < 420) {
+        if (quarry && v.shotTimer <= 0 && dist(v.x, v.y, quarry.x, quarry.y) < 420) {
           v.shotTimer = 1.4 + w.rng();
-          const a = angleTo(v.x, v.y, pv.x, pv.y) + (w.rng() - 0.5) * 0.3;
+          const a = angleTo(v.x, v.y, quarry.x, quarry.y) + (w.rng() - 0.5) * 0.3;
           w.bullets.push({
             x: v.x + Math.cos(a) * (v.r + 12), y: v.y + Math.sin(a) * (v.r + 12),
             vx: Math.cos(a) * 860, vy: Math.sin(a) * 860,
@@ -928,6 +958,17 @@ function onVehicleDisabled(w, v, byPlayer) {
   w.effects.push({ kind: 'break', x: v.x, y: v.y, t: 0, dur: 0.5 });
   w.fx.explosion?.(v.x, v.y);
   w.cam.shake = Math.min(1.3, w.cam.shake + 0.4);
+  if (v.tag) w.vehicleDownTags.add(v.tag);
+  // escort missions: losing the ward is losing the mission
+  if (v.tag === 'truck' && w.mission.convoyGoal === 'protect') {
+    const van = w.objectives.find((o) => o.id === 'van');
+    if (van) van.failed = true;
+    w.fx.banner?.('THE EVIDENCE VAN IS DOWN');
+  }
+  if (v.tag === 'wrecker') {
+    w.fx.banner?.('THE WRECKER IS STOPPED');
+    saveCheckpoint(w);
+  }
   if (v.ai === 'traffic') {
     if (!v.harmed) {
       v.harmed = true;
@@ -1045,6 +1086,17 @@ function updateBullets(w, dt) {
 
 function hitEntity(w, t, dmg, { lethal, stun = 0, kx = 0, ky = 0, fromPlayer }) {
   if (dmg <= 0) return;
+  // Riot shields absorb frontal hits; flank or get behind them. The knockback
+  // vector points away from the shooter, so the shooter sits at -k.
+  if (t.shield && (kx || ky) && t.state !== 'DOWNED' && !isCuffable(t.state)) {
+    const dirToSource = Math.atan2(-ky, -kx);
+    if (Math.abs(angleDiff(t.aimAngle ?? 0, dirToSource)) < 1.2) {
+      dmg *= 0.12;
+      w.effects.push({ kind: 'spark', x: t.x + Math.cos(dirToSource) * 16, y: t.y + Math.sin(dirToSource) * 16, t: 0, dur: 0.15 });
+      // holding the line still rattles them
+      t.moraleTimer = Math.min(t.moraleTimer ?? 1, 0.4);
+    }
+  }
   t.hitFlash = 0.12;
   moveCircle(w, t, kx * 0.06, ky * 0.06);
   w.effects.push({ kind: 'hit', x: t.x, y: t.y, t: 0, dur: 0.18 });
