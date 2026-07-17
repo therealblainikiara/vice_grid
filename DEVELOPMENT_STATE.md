@@ -1,6 +1,22 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-17 (session 11, checkpoint 2) — RENDERING REPAIRED + FULL CAMPAIGN + ALL OPS COMPLETE
+Updated: 2026-07-17 (session 11, checkpoint 3) — PER-MISSION ENVIRONMENTS + FULL CAMPAIGN + ALL OPS COMPLETE
+
+## Session-11 checkpoint 3: Per-mission environments (browser-verified)
+User gripe: every mission looked like "a city surrounding an area" — all '#' walls rendered
+as random-height tower façades with lit windows, even inside a warehouse. Fixed with an
+environment theme system in render3d.js (`ENVIRONMENTS` + `MISSION_ENV`, overridable via a
+mission-def `environment` field):
+- Themes: street (city façades, unchanged), warehouse/industrial (corrugated steel partitions,
+  bay-marked concrete / riveted deck + safety lines along walls), port (stacked shipping
+  containers in cargo-line colours on concrete apron), precinct (concrete-block walls,
+  institutional checker tile), office/lab/penthouse (panel+glazing walls; carpet / epoxy /
+  veined marble floors), club (padded acoustic walls with emissive neon trim rail).
+- Interior walls are uniform partitions (hMul×WALL_H) with a 1.5× map-border shell; only city
+  façades keep per-tile height variance. Neon signage + rain-puddle decals now street-only;
+  oil stains only on asphalt/concrete/deck. Interiors get lifted hemi/ambient "house lighting".
+- Verified in-browser: m04 warehouse, m05 port, m09 precinct, m14 office. 83/83 tests,
+  validator 24/24, demo 0.75 MB.
 
 ## Session-11 checkpoint 2: Post-FX rendering repair (browser-verified)
 The checkpoint-1 post stack shipped broken — game canvas rendered black. Root causes and fixes:

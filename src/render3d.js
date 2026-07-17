@@ -27,6 +27,38 @@ const WALL_H = 78;
 const MAX_NEON_LIGHTS = 6;
 
 const NEON = ['#31d3ff', '#ff4fd8', '#ffd94f', '#58d0ba', '#9dff57', '#ff8a3d'];
+
+// ---------------------------------------------------------------- environments
+//
+// A '#' tile is not always a downtown tower. Each mission plays somewhere, and
+// the walls/floor must say where: corrugated steel over bay-marked concrete is
+// a warehouse, container stacks are a port, block walls on checker tile are a
+// precinct. `wall` picks the texture painter, `hMul` scales partition height
+// (map-border walls get 1.5x so interiors read as an enclosed shell), `vary`
+// is per-tile height noise (big for city skylines, tiny for real walls),
+// `signs` gates neon signage, `floor` picks the ground painter for '.' tiles.
+const ENVIRONMENTS = {
+  street:     { wall: 'facade',    hMul: 1,    vary: 0.6,  tint: '#3a4668', signs: true,  floor: 'asphalt',  outdoor: true },
+  club:       { wall: 'club',      hMul: 0.5,  vary: 0.04, tint: '#4a3a58', signs: true,  floor: 'club' },
+  warehouse:  { wall: 'metal',     hMul: 0.55, vary: 0.05, tint: '#6a7482', signs: false, floor: 'concrete' },
+  port:       { wall: 'container', hMul: 0.5,  vary: 0.3,  tint: '#ffffff', signs: false, floor: 'concrete', outdoor: true },
+  lab:        { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#96a29a', signs: false, floor: 'epoxy' },
+  precinct:   { wall: 'block',     hMul: 0.5,  vary: 0.04, tint: '#707888', signs: false, floor: 'tile' },
+  industrial: { wall: 'metal',     hMul: 0.55, vary: 0.06, tint: '#565e6a', signs: false, floor: 'deck' },
+  office:     { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#8892a2', signs: false, floor: 'carpet' },
+  penthouse:  { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#a89e8e', signs: false, floor: 'marble' },
+};
+// Renderer-side default per mission; a mission def can override with its own
+// `environment` field. Anything unlisted is a city street.
+const MISSION_ENV = {
+  m02: 'club', m04: 'warehouse', m05: 'port', m08: 'lab', m09: 'precinct',
+  m11: 'industrial', m12: 'industrial', m13: 'industrial', m14: 'office',
+  m16: 'penthouse', op3: 'port', op7: 'office',
+};
+const CONTAINER_COLORS = ['#b4432e', '#2e6ab4', '#3c8a4a', '#c9822f', '#8a3c6e', '#4a8a92'];
+function envFor(mission) {
+  return ENVIRONMENTS[mission.environment ?? MISSION_ENV[mission.id]] ?? ENVIRONMENTS.street;
+}
 const SIGN_SETS = {
   street: [['HALCYON', '#31d3ff'], ['GLOW⁰', '#9dff57'], ['NOODLE-24', '#ff8a3d'],
     ['CREDIT NOW', '#ffd94f'], ['BAIL BONDS', '#ff4fd8'], ['QUICKCELL', '#58d0ba'],
@@ -343,16 +375,123 @@ function makeWallTexture(variant) {
   return { map, emissiveMap };
 }
 
+// Themed wall painters. All draw shading over a white base so the per-instance
+// tint colours them, same trick as the façade. Emissive canvas starts black;
+// only styles with a light source (club trim, office glass) touch it.
+function makeThemeWallTexture(style, variant) {
+  if (style === 'facade') return makeWallTexture(variant);
+  const S = 128;
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const e = document.createElement('canvas'); e.width = S; e.height = S;
+  const g = c.getContext('2d');
+  const q = e.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, S, S);
+  q.fillStyle = '#000000'; q.fillRect(0, 0, S, S);
+
+  if (style === 'metal') {
+    // corrugated sheeting: vertical ribs, seam rails, rust bleeding from bolts
+    for (let x = 0; x < S; x += 8) {
+      g.fillStyle = 'rgba(0,0,0,0.20)'; g.fillRect(x, 0, 3, S);
+      g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(x + 4, 0, 2, S);
+    }
+    for (const y of [S * 0.34, S * 0.68]) {
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, y, S, 3);
+      for (let x = 6; x < S; x += 16) {
+        g.fillStyle = 'rgba(20,22,26,0.8)'; g.fillRect(x, y - 2, 3, 3);
+      }
+    }
+    for (let i = 0; i < 5; i++) {
+      const x = hash(i, variant, 70) * S, top = hash(i, variant, 71) * S * 0.5;
+      g.fillStyle = `rgba(120,62,28,${0.10 + hash(i, variant, 72) * 0.14})`;
+      g.fillRect(x, top, 3 + hash(i, variant, 73) * 3, S - top);
+    }
+  } else if (style === 'container') {
+    // stacked shipping containers: heavy stack seams, vertical ribs, castings
+    for (let x = 2; x < S; x += 10) {
+      g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x, 0, 4, S);
+    }
+    for (let y = 0; y < S; y += 43) {
+      g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, y, S, 5);
+      g.fillStyle = 'rgba(15,17,20,0.9)';
+      g.fillRect(2, y + 6, 7, 7); g.fillRect(S - 9, y + 6, 7, 7);
+    }
+    if (variant === 1) { // door end: hinge rods + lock bars
+      g.fillStyle = 'rgba(0,0,0,0.5)';
+      g.fillRect(S * 0.31, 0, 3, S); g.fillRect(S * 0.66, 0, 3, S);
+    }
+  } else if (style === 'block') {
+    // painted concrete block: running-bond mortar grid, grime at the skirting
+    let flip = false;
+    for (let y = 0; y < S; y += 16) {
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, y, S, 2);
+      for (let x = flip ? 16 : 0; x < S; x += 32) {
+        g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x, y, 2, 16);
+        g.fillStyle = `rgba(0,0,0,${hash(x, y, variant) * 0.08})`;
+        g.fillRect(x + 2, y + 2, 30, 14);
+      }
+      flip = !flip;
+    }
+    const grad = g.createLinearGradient(0, S * 0.7, 0, S);
+    grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(20,18,14,0.35)');
+    g.fillStyle = grad; g.fillRect(0, S * 0.7, S, S * 0.3);
+  } else if (style === 'panel') {
+    // architectural panels with a glazing band; variant 1 is a solid core wall
+    for (let x = 0; x < S; x += 64) {
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x, 0, 2, S);
+    }
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, S * 0.5, S, 2);
+    if (variant !== 1) {
+      g.fillStyle = '#1a2230'; g.fillRect(0, S * 0.16, S, S * 0.3);
+      g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(0, S * 0.18, S, 4);
+      q.fillStyle = '#31435e'; q.fillRect(0, S * 0.16, S, S * 0.3); // dim interior glow
+      for (let x = 10; x < S; x += 34) {
+        g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(x, S * 0.16, 2, S * 0.3);
+        q.fillStyle = '#000000'; q.fillRect(x, S * 0.16, 2, S * 0.3);
+      }
+    }
+  } else if (style === 'club') {
+    // padded acoustic panels under a neon trim rail
+    for (let x = 0; x < S; x += 26) {
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x, 0, 3, S);
+      g.fillStyle = 'rgba(255,255,255,0.07)'; g.fillRect(x + 10, 8, 6, S - 16);
+    }
+    const trim = [NEON[1], NEON[0], NEON[3]][variant] ?? NEON[1];
+    g.fillStyle = trim; g.fillRect(0, S * 0.62, S, 4);
+    q.fillStyle = trim; q.fillRect(0, S * 0.62, S, 4);
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  const emissiveMap = new THREE.CanvasTexture(e);
+  emissiveMap.colorSpace = THREE.SRGBColorSpace;
+  return { map, emissiveMap };
+}
+
+// Wall materials per style, built on first use: most sessions touch 2-3 themes.
+const WALL_STYLE_MAT = {
+  facade: { roughness: 0.85, metalness: 0.08, emissiveIntensity: 1.15 },
+  metal: { roughness: 0.5, metalness: 0.5, emissiveIntensity: 0 },
+  container: { roughness: 0.6, metalness: 0.35, emissiveIntensity: 0 },
+  block: { roughness: 0.92, metalness: 0.02, emissiveIntensity: 0 },
+  panel: { roughness: 0.45, metalness: 0.15, emissiveIntensity: 0.9 },
+  club: { roughness: 0.8, metalness: 0.05, emissiveIntensity: 1.6 },
+};
+function getWallMaterials(style) {
+  if (!R.wallMats) R.wallMats = new Map();
+  if (!R.wallMats.has(style)) {
+    const p = WALL_STYLE_MAT[style] ?? WALL_STYLE_MAT.facade;
+    R.wallMats.set(style, [0, 1, 2].map((v) => {
+      const { map, emissiveMap } = makeThemeWallTexture(style, v);
+      return new THREE.MeshStandardMaterial({
+        color: '#ffffff', map, emissiveMap, emissive: '#ffffff',
+        emissiveIntensity: p.emissiveIntensity, roughness: p.roughness, metalness: p.metalness,
+      });
+    }));
+  }
+  return R.wallMats.get(style);
+}
+
 function makeMaterials() {
-  const walls = [0, 1, 2].map((v) => {
-    const { map, emissiveMap } = makeWallTexture(v);
-    return new THREE.MeshStandardMaterial({
-      color: '#ffffff', map, emissiveMap, emissive: '#ffffff', emissiveIntensity: 1.15,
-      roughness: 0.85, metalness: 0.08,
-    });
-  });
   return {
-    walls,
     wallSide: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, metalness: 0.05 }),
     crate: new THREE.MeshStandardMaterial({ color: '#63513a', roughness: 0.95 }),
     shelf: new THREE.MeshStandardMaterial({ color: '#2e3c50', roughness: 0.7, metalness: 0.2 }),
@@ -379,6 +518,7 @@ function bakeGround(w) {
   q.fillStyle = '#d8d8d8'; q.fillRect(0, 0, cw, ch);
 
   const at = (tx, ty) => w.mission.map[ty]?.[tx] ?? '.';
+  const theme = envFor(w.mission);
   for (let ty = 0; ty < w.rows; ty++) {
     for (let tx = 0; tx < w.cols; tx++) {
       const px = tx * TILE, py = ty * TILE;
@@ -408,20 +548,17 @@ function bakeGround(w) {
         g.strokeStyle = 'rgba(255,255,255,0.08)'; g.strokeRect(px + 1, py + 1, TILE - 2, TILE - 2);
         q.fillStyle = '#3a3a3a'; q.fillRect(px, py, TILE, TILE); // polished floor
       } else {
-        g.fillStyle = hash(tx, ty, 3) > 0.5 ? '#191622' : '#171420';
-        g.fillRect(px, py, TILE, TILE);
-        g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1;
-        g.strokeRect(px + 0.5, py + 0.5, TILE / 2, TILE / 2);
-        g.strokeRect(px + TILE / 2 + 0.5, py + TILE / 2 + 0.5, TILE / 2, TILE / 2);
-        q.fillStyle = '#9a9a9a'; q.fillRect(px, py, TILE, TILE);
+        paintFloorTile(g, q, theme.floor, px, py, tx, ty, at, w);
       }
-      if (h0 > 0.86) {
+      // oil stains suit worksites and streets; they'd read as filth on marble
+      if (h0 > 0.86 && ['asphalt', 'concrete', 'deck'].includes(theme.floor)) {
         g.fillStyle = 'rgba(0,0,0,0.22)';
         g.beginPath();
         g.ellipse(px + TILE * hash(tx, ty, 5), py + TILE * hash(tx, ty, 6), 15, 9, h0 * 3, 0, Math.PI * 2);
         g.fill();
       }
-      if (hash(tx, ty, 8) > 0.9 && chr !== '#') {
+      // rain puddles catching neon are a street phenomenon only
+      if (theme.outdoor && theme.signs && hash(tx, ty, 8) > 0.9 && chr !== '#') {
         const cx = px + TILE / 2, cy = py + TILE / 2;
         const neon = NEON[(hash(tx, ty, 9) * NEON.length) | 0];
         g.fillStyle = 'rgba(8,12,22,0.9)';
@@ -440,6 +577,82 @@ function bakeGround(w) {
   const roughTex = new THREE.CanvasTexture(rgh);
   roughTex.anisotropy = anis;
   return { colorTex, roughTex, cw, ch };
+}
+
+// Floor painters for open tiles, one look per environment. `q` is the
+// roughness map: darker grey = glossier under the scene lights.
+function paintFloorTile(g, q, floor, px, py, tx, ty, at, w) {
+  const h0 = hash(tx, ty, 3);
+  const wallNear = (dx, dy) => at(tx + dx, ty + dy) === '#';
+  if (floor === 'concrete' || floor === 'deck') {
+    const steel = floor === 'deck';
+    g.fillStyle = steel ? (h0 > 0.5 ? '#3c4149' : '#394047') : (h0 > 0.5 ? '#44464b' : '#404247');
+    g.fillRect(px, py, TILE, TILE);
+    // expansion joints / plate seams every third tile
+    g.fillStyle = 'rgba(0,0,0,0.4)';
+    if (tx % 3 === 0) g.fillRect(px, py, 2, TILE);
+    if (ty % 3 === 0) g.fillRect(px, py, TILE, 2);
+    if (steel) { // rivets at plate corners
+      g.fillStyle = 'rgba(0,0,0,0.5)';
+      g.fillRect(px + 5, py + 5, 3, 3); g.fillRect(px + TILE - 8, py + TILE - 8, 3, 3);
+      q.fillStyle = '#6a6a6a'; q.fillRect(px, py, TILE, TILE);
+    } else {
+      q.fillStyle = '#8a8a8a'; q.fillRect(px, py, TILE, TILE);
+    }
+    // safety line along any wall face: says "working floor", aids readability
+    g.fillStyle = 'rgba(214,168,32,0.55)';
+    if (wallNear(0, -1)) g.fillRect(px, py + 5, TILE, 3);
+    if (wallNear(0, 1)) g.fillRect(px, py + TILE - 8, TILE, 3);
+    if (wallNear(-1, 0)) g.fillRect(px + 5, py, 3, TILE);
+    if (wallNear(1, 0)) g.fillRect(px + TILE - 8, py, 3, TILE);
+  } else if (floor === 'tile') {
+    const half = TILE / 2;
+    for (let sy = 0; sy < 2; sy++) for (let sx = 0; sx < 2; sx++) {
+      g.fillStyle = (sx + sy + tx + ty) % 2 ? '#4e5258' : '#5c6066';
+      g.fillRect(px + sx * half, py + sy * half, half, half);
+    }
+    g.strokeStyle = 'rgba(0,0,0,0.4)'; g.lineWidth = 1;
+    g.strokeRect(px + 0.5, py + 0.5, half, half);
+    g.strokeRect(px + half + 0.5, py + half + 0.5, half, half);
+    q.fillStyle = '#4a4a4a'; q.fillRect(px, py, TILE, TILE);
+  } else if (floor === 'epoxy') {
+    g.fillStyle = h0 > 0.5 ? '#47554e' : '#43514a';
+    g.fillRect(px, py, TILE, TILE);
+    g.fillStyle = 'rgba(0,0,0,0.3)';
+    if (tx % 2 === 0) g.fillRect(px, py, 1, TILE);
+    if (ty % 2 === 0) g.fillRect(px, py, TILE, 1);
+    q.fillStyle = '#333333'; q.fillRect(px, py, TILE, TILE);
+  } else if (floor === 'carpet') {
+    const half = TILE / 2;
+    for (let sy = 0; sy < 2; sy++) for (let sx = 0; sx < 2; sx++) {
+      g.fillStyle = (sx + sy + tx + ty) % 2 ? '#2c3240' : '#2a2f3c';
+      g.fillRect(px + sx * half, py + sy * half, half, half);
+    }
+    q.fillStyle = '#cacaca'; q.fillRect(px, py, TILE, TILE);
+  } else if (floor === 'marble') {
+    g.fillStyle = h0 > 0.5 ? '#7e7a70' : '#78746a';
+    g.fillRect(px, py, TILE, TILE);
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(px + hash(tx, ty, 40) * TILE, py);
+    g.quadraticCurveTo(px + hash(tx, ty, 41) * TILE, py + TILE / 2,
+      px + hash(tx, ty, 42) * TILE, py + TILE);
+    g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,0.35)';
+    g.strokeRect(px + 0.5, py + 0.5, TILE, TILE);
+    q.fillStyle = '#2a2a2a'; q.fillRect(px, py, TILE, TILE);
+  } else if (floor === 'club') {
+    g.fillStyle = h0 > 0.5 ? '#17141f' : '#15121c';
+    g.fillRect(px, py, TILE, TILE);
+    q.fillStyle = '#565656'; q.fillRect(px, py, TILE, TILE);
+  } else { // asphalt: the original street look
+    g.fillStyle = h0 > 0.5 ? '#191622' : '#171420';
+    g.fillRect(px, py, TILE, TILE);
+    g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1;
+    g.strokeRect(px + 0.5, py + 0.5, TILE / 2, TILE / 2);
+    g.strokeRect(px + TILE / 2 + 0.5, py + TILE / 2 + 0.5, TILE / 2, TILE / 2);
+    q.fillStyle = '#9a9a9a'; q.fillRect(px, py, TILE, TILE);
+  }
 }
 
 // ---------------------------------------------------------------- static build
@@ -463,23 +676,38 @@ function buildStatic(w) {
   for (let ty = 0; ty < w.rows; ty++) {
     for (let tx = 0; tx < w.cols; tx++) if (w.walls.has(tx + ',' + ty)) wallTiles.push([tx, ty]);
   }
-  // three façade variants, one InstancedMesh each: a whole city in 3 draw calls
+  // three texture variants, one InstancedMesh each: a whole scene in 3 draw calls
+  const theme = envFor(w.mission);
+  const wallMats = getWallMaterials(theme.wall);
   const buckets = [[], [], []];
   for (const t of wallTiles) buckets[(hash(t[0], t[1], 42) * 3) | 0].push(t);
   const m4 = new THREE.Matrix4();
   const colr = new THREE.Color();
   buckets.forEach((tiles, v) => {
     if (!tiles.length) return;
-    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, WALL_H, TILE), R.mat.walls[v], tiles.length);
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, WALL_H, TILE), wallMats[v], tiles.length);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     tiles.forEach(([tx, ty], i) => {
-      // vary height so a wall run reads as a row of buildings, not a fence
-      const hVar = 1 + hash(tx, ty, 30) * 0.6;
+      // city façades vary height so a wall run reads as a row of buildings, not
+      // a fence; interiors are uniform partitions with a taller border shell
+      let hVar;
+      if (theme.wall === 'facade') {
+        hVar = 1 + hash(tx, ty, 30) * 0.6;
+      } else {
+        const border = tx === 0 || ty === 0 || tx === w.cols - 1 || ty === w.rows - 1;
+        hVar = theme.hMul * (border ? 1.5 : 1) + hash(tx, ty, 30) * theme.vary;
+      }
       m4.makeScale(1, hVar, 1);
       m4.setPosition(tx * TILE + TILE / 2, (WALL_H * hVar) / 2, ty * TILE + TILE / 2);
       mesh.setMatrixAt(i, m4);
-      colr.setStyle('#3a4668').multiplyScalar(0.62 + hash(tx, ty, 31) * 0.55);
+      if (theme.wall === 'container') {
+        colr.setStyle(CONTAINER_COLORS[(hash(tx, ty, 33) * CONTAINER_COLORS.length) | 0])
+          .multiplyScalar(0.75 + hash(tx, ty, 31) * 0.35);
+      } else {
+        colr.setStyle(theme.tint).multiplyScalar(
+          theme.outdoor ? 0.62 + hash(tx, ty, 31) * 0.55 : 0.82 + hash(tx, ty, 31) * 0.22);
+      }
       mesh.setColorAt(i, colr);
     });
     mesh.instanceMatrix.needsUpdate = true;
@@ -487,19 +715,22 @@ function buildStatic(w) {
     R.statics.add(mesh);
   });
 
-  const signSet = SIGN_SETS[w.mission.signage] ?? SIGN_SETS.street;
-  const placed = [];
-  for (const [tx, ty] of wallTiles) {
-    const southOpen = ty + 1 < w.rows && !w.walls.has(tx + ',' + (ty + 1));
-    if (!southOpen || hash(tx, ty, 21) <= 0.62) continue;
-    const sx = tx * TILE + TILE / 2, sz = ty * TILE + TILE + 1.5;
-    if (placed.some((p) => Math.abs(p.z - sz) < 8 && Math.abs(p.x - sx) < 150)) continue;
-    const [text, color] = signSet[(hash(tx, ty, 22) * signSet.length) | 0];
-    const mesh = makeSignMesh(text, color);
-    mesh.position.set(sx, WALL_H * 0.6, sz);
-    R.statics.add(mesh);
-    placed.push({ x: sx, z: sz });
-    R.signs.push({ x: sx, y: WALL_H * 0.6, z: sz, color: new THREE.Color(color) });
+  if (theme.signs) {
+    const signSet = SIGN_SETS[w.mission.signage] ?? SIGN_SETS.street;
+    const placed = [];
+    const signH = WALL_H * (theme.wall === 'facade' ? 0.6 : theme.hMul * 0.72);
+    for (const [tx, ty] of wallTiles) {
+      const southOpen = ty + 1 < w.rows && !w.walls.has(tx + ',' + (ty + 1));
+      if (!southOpen || hash(tx, ty, 21) <= 0.62) continue;
+      const sx = tx * TILE + TILE / 2, sz = ty * TILE + TILE + 1.5;
+      if (placed.some((p) => Math.abs(p.z - sz) < 8 && Math.abs(p.x - sx) < 150)) continue;
+      const [text, color] = signSet[(hash(tx, ty, 22) * signSet.length) | 0];
+      const mesh = makeSignMesh(text, color);
+      mesh.position.set(sx, signH, sz);
+      R.statics.add(mesh);
+      placed.push({ x: sx, z: sz });
+      R.signs.push({ x: sx, y: signH, z: sz, color: new THREE.Color(color) });
+    }
   }
 }
 
@@ -964,10 +1195,13 @@ export function draw3d(canvas, w, settings) {
   // blackout: kill the sky, hand each agent a torch. Adjusted per-frame so
   // switching missions restores the normal night without a renderer rebuild.
   const dark = !!w.mission.blackout;
-  R.key.intensity = dark ? 0.22 : 2.6;
+  // interiors have no lit city windows feeding the frame — compensate with
+  // house lighting: stronger fill, softer moon key
+  const indoor = !envFor(w.mission).outdoor;
+  R.key.intensity = dark ? 0.22 : indoor ? 2.0 : 2.6;
   R.rim.intensity = dark ? 0.1 : 1.1;
-  R.hemi.intensity = dark ? 0.28 : 1.7;
-  R.amb.intensity = dark ? 0.14 : 0.9;
+  R.hemi.intensity = dark ? 0.28 : indoor ? 2.4 : 1.7;
+  R.amb.intensity = dark ? 0.14 : indoor ? 1.5 : 0.9;
   R.torches.forEach((t, i) => {
     const p = w.players[i];
     const on = dark && p && !p.downed;
