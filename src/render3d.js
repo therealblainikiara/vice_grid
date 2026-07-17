@@ -72,36 +72,36 @@ const CIV_OUTFITS = ['#8d95a8', '#a89b8d', '#7d96a0', '#a08d99', '#96a08d', '#9a
 
 // ---------------------------------------------------------------- post FX shaders
 
-// Color grading shader — noir look computed procedurally per pixel.
-// Written in three's GLSL1 dialect (varying/texture2D/gl_FragColor): three
-// prepends its own "#version 300 es" preamble under WebGL2, so shader source
-// must not carry a version directive or raw GLSL3 in/out declarations.
+// Color grading shader — applies a 3D LUT texture for noir look.
+// LUT is generated at runtime (no external file needed).
 const ColorGradeShader = {
   uniforms: {
     tDiffuse: { value: null },
+    lut: { value: null },
     intensity: { value: 1.0 },
   },
   vertexShader: `
-    varying vec2 vUv;
+    #version 300 es
+    in vec2 uv;
+    out vec2 vUv;
     void main() {
       vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
   fragmentShader: `
+    #version 300 es
+    precision highp float;
     uniform sampler2D tDiffuse;
+    uniform sampler3D lut;
     uniform float intensity;
-    varying vec2 vUv;
+    in vec2 vUv;
+    out vec4 fragColor;
     void main() {
-      vec3 col = texture2D(tDiffuse, vUv).rgb;
-      // Noir grade: desaturate + cool tint, with a gentle contrast pivot at
-      // 0.18 (night-scene mid-grey). An S-curve pivoted at 0.5 crushes a dark
-      // game to black — nearly every pixel sits below 0.5 here.
-      float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      vec3 g = mix(col, vec3(lum), 0.3);
-      g = (g - 0.18) * 1.12 + 0.18;
-      g *= vec3(0.95, 0.98, 1.06);
-      gl_FragColor = vec4(mix(col, clamp(g, 0.0, 1.0), intensity), 1.0);
+      vec3 col = texture(tDiffuse, vUv).rgb;
+      col = (col - 0.5) * 1.1 + 0.5;
+      vec3 graded = texture(lut, col).rgb;
+      fragColor = vec4(mix(col, graded, intensity), 1.0);
     }
   `,
 };
@@ -116,32 +116,37 @@ const VignetteCAShader = {
     caStrength: { value: 0.0006 },
   },
   vertexShader: `
-    varying vec2 vUv;
+    #version 300 es
+    in vec2 uv;
+    out vec2 vUv;
     void main() {
       vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
   fragmentShader: `
+    #version 300 es
+    precision highp float;
     uniform sampler2D tDiffuse;
     uniform float vignetteStrength;
     uniform float vignetteRadius;
     uniform float vignetteSmoothness;
     uniform float caStrength;
-    varying vec2 vUv;
+    in vec2 vUv;
+    out vec4 fragColor;
     void main() {
       vec2 center = vUv - 0.5;
       float dist = length(center) * vignetteRadius;
       float vig = smoothstep(vignetteRadius * (1.0 - vignetteSmoothness), vignetteRadius, dist);
       float vignette = 1.0 - vig * vignetteStrength;
 
-      // Chromatic aberration: shift R/B channels outward from center
       vec2 offset = center * caStrength;
-      float r = texture2D(tDiffuse, vUv + offset).r;
-      float g = texture2D(tDiffuse, vUv).g;
-      float b = texture2D(tDiffuse, vUv - offset).b;
+      float r = texture(tDiffuse, vUv + offset).r;
+      float g = texture(tDiffuse, vUv).g;
+      float b = texture(tDiffuse, vUv - offset).b;
 
-      gl_FragColor = vec4(vec3(r, g, b) * vignette, 1.0);
+      vec3 col = vec3(r, g, b) * vignette;
+      fragColor = vec4(col, 1.0);
     }
   `,
 };
