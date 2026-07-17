@@ -5,11 +5,12 @@ import { SCORE } from './grading.js';
 import { summary } from './objectives.js';
 import { UPGRADE_DEFS } from './upgrades.js';
 import { ACTION_ORDER, ACTION_LABELS, codeLabel } from './input.js';
+import { CAMPAIGN, MISSIONS } from './missions.js';
 
 const $ = (id) => document.getElementById(id);
 
 export function makeUI(settings, audio) {
-  const screens = ['title', 'menu', 'agent', 'briefing', 'pause', 'results', 'settings', 'credits', 'upgrade', 'missions', 'controls'];
+  const screens = ['title', 'menu', 'agent', 'briefing', 'pause', 'results', 'settings', 'credits', 'upgrade', 'missions', 'controls', 'ending', 'recap'];
   let bannerTimer = null, subtitleTimer = null;
 
   function show(name) {
@@ -114,6 +115,62 @@ export function makeUI(settings, audio) {
     show('briefing');
   }
 
+  function showRecap(campaign, mission, agentName) {
+    const mains = CAMPAIGN.filter((m) => m.type === 'main');
+    const idx = mains.findIndex((m) => m.id === mission.id);
+    const completed = idx > 0 ? mains.slice(0, idx) : [];
+    const isNg = campaign.newGamePlus;
+    const cycle = campaign.ngPlusCycle || 0;
+
+    let html = '';
+    if (completed.length === 0) {
+      html = `<p><b>DISPATCH:</b> Welcome to Cobalt City, ${agentName}. The GLOW epidemic has the city in a chokehold. Halcyon Wellness pumps it in; Civic Shield looks the other way. Two badges. One shot. Let's see what you're made of.</p>`;
+    } else {
+      const last = completed[completed.length - 1];
+      const lastMission = MISSIONS[last.id];
+      const grade = campaign.grades[last.id] || '—';
+      html = `<p><b>DISPATCH:</b> Last time: <b>${lastMission.title}</b>. Grade <b>${grade}</b>. ${lastMission.debriefWin.lines[0]}</p>`;
+      if (completed.length > 1) {
+        html += `<p>Since the beginning: <b>${completed.length} districts</b> secured. `;
+        const totalArrests = campaign.totals.arrests;
+        const totalKills = campaign.totals.kills;
+        const totalEv = campaign.totals.evidence;
+        html += `${totalArrests} arrests. ${totalKills} lethal. ${totalEv} evidence pieces recovered.</p>`;
+      }
+      if (isNg) {
+        html += `<p class="hint" style="color:var(--gold); margin-top:8px;">NEW GAME+ CYCLE ${cycle} — Halcyon adapts. Enemies hit harder. You hit back.</p>`;
+      }
+    }
+
+    // Narrative flags
+    const flags = [];
+    if (campaign.flags.chromeDogArrested) flags.push('CHROME DOG in custody (M01)');
+    if (campaign.flags.finalBossArrested) flags.push('WARREN arrested (M16)');
+    if (campaign.flags.midnightArrested) flags.push('MIDNIGHT arrested (M02)');
+    if (campaign.flags.stacksArrested) flags.push('BIG STACKS arrested (M04)');
+    if (campaign.flags.craneArrested) flags.push('CRANE arrested (M05)');
+    if (campaign.flags.shiverArrested) flags.push('SHIVER arrested (M06)');
+    if (campaign.flags.lockjawArrested) flags.push('LOCKJAW arrested (M07)');
+    if (campaign.flags.chemistArrested) flags.push('THE CHEMIST arrested (M08)');
+    if (campaign.flags.graftArrested) flags.push('GRAFT arrested (M09)');
+    if (campaign.flags.wreckerArrested) flags.push('THE WRECKER arrested (M10)');
+    if (campaign.flags.fuseboxArrested) flags.push('FUSEBOX arrested (M11)');
+    if (campaign.flags.staticchoirArrested) flags.push('STATIC CHOIR arrested (M12)');
+    if (campaign.flags.overseerArrested) flags.push('THE OVERSEER arrested (M13)');
+    if (campaign.flags.architectArrested) flags.push('THE ARCHITECT arrested (M14)');
+    if (campaign.flags.wardenArrested) flags.push('THE WARDEN arrested (M15)');
+
+    const flagsHtml = flags.length
+      ? `<div><b>High-Value Targets in Custody:</b> ${flags.join(' · ')}</div>`
+      : '<div class="hint">No high-value arrests yet.</div>';
+
+    $('recap-title').textContent = isNg ? `NEW GAME+ CYCLE ${cycle} — STORY SO FAR` : 'STORY SO FAR';
+    $('recap-body').innerHTML = html;
+    $('recap-flags').innerHTML = flagsHtml;
+    $('recap-next').textContent = `Next: ${mission.title}`;
+    show('recap');
+  }
+
   function showResults(mission, stats, gradeInfo, win, debrief) {
     $('results-title').textContent = win ? 'SCENE SECURED' : 'MISSION FAILED';
     $('results-title').style.color = win ? 'var(--teal)' : 'var(--red)';
@@ -134,6 +191,34 @@ export function makeUI(settings, audio) {
     $('btn-next').style.display = win ? '' : 'none';
     $('btn-retry').style.display = win ? 'none' : '';
     show('results');
+  }
+
+  // Campaign ending cinematic
+  function showEnding(campaign, ending) {
+    const titles = {
+      FULL_DISCLOSURE: 'FULL DISCLOSURE',
+      JUSTICE: 'JUSTICE',
+      COMPROMISED_VICTORY: 'COMPROMISED VICTORY',
+      NEW_MANAGEMENT: 'NEW MANAGEMENT',
+    };
+    const bodies = {
+      FULL_DISCLOSURE: `The master key turned every lock. Halcyon's servers dumped their guts onto every screen in Cobalt — shell companies, bribe ledgers, test-subject rosters, the lot. The Mayor resigned at noon. The Civic Shield contract was voided by sunset. WARREN is in a federal supermax, singing for a deal. GLOW is dead. The pipeline is severed. You did it, Grid. Every name on a warrant. Every body accounted for.`,
+      JUSTICE: `The evidence held. The arrests stuck. WARREN took a plea — life without parole, in exchange for the names above him. Half the city council is under indictment. Civic Shield is being restructured under federal oversight. GLOW production is halted. It's not the clean sweep you wanted, but it's justice. The city can breathe tonight.`,
+      COMPROMISED_VICTORY: `The case closed, but the files are thinner than they should be. WARREN walked on a technicality — jurisdictional conflict, sealed records, a judge who golfed with the right people. Civic Shield keeps their contract with "reforms." GLOW seizures drop 60%, but the cookers adapt. You saved lives, Grid. Just not all of them.`,
+      NEW_MANAGEMENT: `The bodies piled up and the evidence burned. WARREN's lawyers buried the rest. A new crew moves into the penthouse — different logos, same product. The Mayor calls it "stability." Civic Shield gets a budget increase. You're reassigned to traffic. The city doesn't know it lost tonight. But you do.`,
+    };
+    const stats = campaign.totals;
+    const evidencePct = campaign.evidenceTotal > 0 ? Math.round((campaign.evidenceFound / campaign.evidenceTotal) * 100) : 0;
+    const suspects = stats.arrests + stats.kills;
+    const arrestRatio = suspects > 0 ? Math.round((stats.arrests / suspects) * 100) : 100;
+    $('ending-title').textContent = titles[ending];
+    $('ending-body').textContent = bodies[ending];
+    $('ending-stats').innerHTML = `Arrests: ${stats.arrests} · Kills: ${stats.kills} · Civilians Lost: ${stats.civiliansKilled} · Evidence: ${evidencePct}% · Arrest Ratio: ${arrestRatio}%`;
+    const isPerfect = ending === 'FULL_DISCLOSURE';
+    $('btn-ending-ngplus').style.display = isPerfect ? '' : 'none';
+    $('btn-ending-ngplus').onclick = () => { audio.uiConfirm(); window.dispatchEvent(new CustomEvent('vg-ngplus')); };
+    $('btn-ending-menu').onclick = () => { audio.uiConfirm(); window.dispatchEvent(new CustomEvent('vg-endmenu')); };
+    show('ending');
   }
 
   function buildSettingsPanel(onChange) {
@@ -160,6 +245,32 @@ export function makeUI(settings, audio) {
       if (kind === 'check') return `<label class="setting"><span>${label}</span><input type="checkbox" data-key="${key}" ${settings[key] ? 'checked' : ''}></label>`;
       return `<label class="setting"><span>${label}</span><select data-key="${key}">${a.map((o) => `<option ${settings[key] === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
     }).join('');
+    // Gamepad status line
+    const gpStatus = document.createElement('div');
+    gpStatus.className = 'setting';
+    gpStatus.innerHTML = `<span>Gamepad status</span><span id="gp-status" style="color:#b9c4d4">Checking…</span>`;
+    $('settings-body').appendChild(gpStatus);
+    // Refresh button
+    const refreshBtn = document.createElement('button');
+    refreshBtn.type = 'button';
+    refreshBtn.textContent = 'Refresh gamepads';
+    refreshBtn.style.marginLeft = '8px';
+    refreshBtn.onclick = () => { updateGamepadStatus(); };
+    gpStatus.appendChild(refreshBtn);
+    // BLE help
+    const help = document.createElement('div');
+    help.className = 'hint';
+    help.style.marginTop = '8px';
+    help.innerHTML = 'Bluetooth gamepads: pair in Windows Settings → Bluetooth & devices, then press any button to wake. Chrome requires a button press before the Gamepad API sees the device. For BLE controllers not showing up, ensure they are in XInput mode (often hold Start+Home) and re-pair.';
+    $('settings-body').appendChild(help);
+    // Guide link
+    const guideLink = document.createElement('a');
+    guideLink.href = 'https://github.com/yourrepo/vice-grid/wiki/Gamepad-Setup';
+    guideLink.target = '_blank';
+    guideLink.textContent = 'Open Gamepad Setup Guide';
+    guideLink.style.display = 'block';
+    guideLink.style.marginTop = '8px';
+    $('settings-body').appendChild(guideLink);
     $('settings-body').querySelectorAll('input, select').forEach((el) => {
       el.addEventListener('input', () => {
         const key = el.dataset.key;
@@ -167,6 +278,23 @@ export function makeUI(settings, audio) {
         onChange(key);
       });
     });
+    // Update gamepad status periodically
+    setInterval(updateGamepadStatus, 1000);
+    updateGamepadStatus();
+  }
+
+  function updateGamepadStatus() {
+    const pads = navigator.getGamepads?.() ?? [];
+    const connected = pads.filter((p) => p && p.connected);
+    const el = document.getElementById('gp-status');
+    if (!el) return;
+    if (connected.length === 0) {
+      el.textContent = 'No gamepad detected';
+      el.style.color = '#ff5f5f';
+    } else {
+      el.textContent = connected.map((p, i) => `${i + 1}. ${p.id} (${p.buttons.length} btns, ${p.axes.length} axes)`).join(' | ');
+      el.style.color = '#58d0ba';
+    }
   }
 
   // Upgrade / respec screen. onAdjust(key, isBuy) mutates the campaign and
@@ -246,7 +374,8 @@ export function makeUI(settings, audio) {
     show('missions');
   }
 
-  return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults,
+  // Ending screen
+  return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults, showEnding, showRecap,
     buildSettingsPanel, buildControlsPanel, showUpgrade, showMissionSelect, liveScore };
 }
 

@@ -199,7 +199,7 @@ function drawLighting(ctx, w, settings, fx, sx, sy, W, H, now) {
   }
   const lc = cache.light.getContext('2d');
   lc.globalCompositeOperation = 'source-over';
-  lc.fillStyle = 'rgba(4,6,18,0.26)';
+  lc.fillStyle = w.mission.blackout ? 'rgba(2,3,10,0.76)' : 'rgba(4,6,18,0.26)';
   lc.fillRect(0, 0, W, H);
   lc.globalCompositeOperation = 'destination-out';
 
@@ -490,6 +490,8 @@ function styleFor(e, settings) {
     cs_shield: { outfit: '#5a4826', size: 1.16, head: 'cap', bulky: true },
     graft: { outfit: '#5e4a24', size: 1.3, head: 'cap', bulky: true },
     wrecker: { outfit: '#46321e', size: 1.28, head: 'bare', bulky: true },
+    fusebox: { outfit: '#1f4a42', size: 1.08, head: 'cap' },
+    staticchoir: { outfit: '#3a3050', size: 1.26, head: 'hood', bulky: true },
     lockjaw: { outfit: '#2f3644', size: 1.4, head: 'chrome', bulky: true },
     chemist: { outfit: '#9aa38c', size: 1.0, head: 'hood' }, // pale lab coat, toxic accent
   }[e.type] ?? { outfit: '#324a2e', size: 1, head: 'bare' };

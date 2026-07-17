@@ -1,11 +1,61 @@
 // upgrades.js — five-category upgrade system with free respec. Pure; no DOM.
 
 export const UPGRADE_DEFS = {
-  weapons:      { name: 'Weapons',      max: 4, desc: '+8% damage and steadier aim per level' },
-  armor:        { name: 'Armour',       max: 4, desc: '+15 max health per level' },
-  mobility:     { name: 'Mobility',     max: 4, desc: '+6% move speed per level' },
-  enforcement:  { name: 'Enforcement',  max: 4, desc: '+15% cuff speed and extra intimidation per level' },
-  intelligence: { name: 'Intelligence', max: 4, desc: 'Lv1+: evidence compass · Lv3+: reads suspect nerve' },
+  weapons: {
+    name: 'Weapons',
+    max: 4,
+    desc: 'Damage, handling and special ammo unlocks',
+    levels: [
+      '+8% damage, +5% accuracy',
+      '+12% fire rate, reduced recoil',
+      'Unlock alt-fire mode (hold aim + fire)',
+      'Unlock special ammo: incendiary / shock rounds',
+    ],
+  },
+  armor: {
+    name: 'Armour',
+    max: 4,
+    desc: 'Health, damage reduction and survival perks',
+    levels: [
+      '+15 max HP',
+      '+15 max HP, +10% damage reduction',
+      '+15 max HP, knockback resistance',
+      '+15 max HP, slow HP regen (1 HP/s out of combat)',
+    ],
+  },
+  mobility: {
+    name: 'Mobility',
+    max: 4,
+    desc: 'Speed, dodge and traversal abilities',
+    levels: [
+      '+6% move speed',
+      'Dodge cooldown –20%, dodge distance +15%',
+      'Unlock combat slide (crouch + dodge)',
+      'Unlock sprint burst (double speed 3s, 20s CD)',
+    ],
+  },
+  enforcement: {
+    name: 'Enforcement',
+    max: 4,
+    desc: 'Cuffing, intimidation and non-lethal tools',
+    levels: [
+      '+15% cuff speed, +10% intimidate radius',
+      'Intimidate flashes nearby suspects (morale hit)',
+      'Auto-cuff downed suspects in range',
+      'Cuff releases a flashbang (stuns nearby)',
+    ],
+  },
+  intelligence: {
+    name: 'Intelligence',
+    max: 4,
+    desc: 'Information gathering and hacking',
+    levels: [
+      'Evidence compass points to nearest pickup',
+      'Suspects glow when aimed at (highlight)',
+      'Read suspect nerve: see morale & surrender chance',
+      'Hack nearby turrets / cameras (hold interact)',
+    ],
+  },
 };
 
 export function buyUpgrade(c, key) {

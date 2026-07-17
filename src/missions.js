@@ -51,26 +51,26 @@ export const CAMPAIGN = [
   { id: 'm02', act: 1, n: 2, title: 'Club Neon Raid', type: 'main', implemented: true },
   { id: 'm03', act: 1, n: 3, title: 'Highway Glow Run', type: 'main', implemented: true },
   { id: 'm04', act: 1, n: 4, title: 'Warehouse Intercept', type: 'main', implemented: true },
-  { id: 'op1', act: 1, n: 0, title: 'OP: Corner Sweep', type: 'op', implemented: false },
-  { id: 'op2', act: 1, n: 0, title: 'OP: Glow Courier', type: 'op', implemented: false },
+  { id: 'op1', act: 1, n: 0, title: 'OP: Corner Sweep', type: 'op', implemented: true },
+  { id: 'op2', act: 1, n: 0, title: 'OP: Glow Courier', type: 'op', implemented: true },
   { id: 'm05', act: 2, n: 5, title: 'Port of Cobalt', type: 'main', implemented: true },
   { id: 'm06', act: 2, n: 6, title: 'Tower Block Evac', type: 'main', implemented: true },
   { id: 'm07', act: 2, n: 7, title: 'Convoy Takedown', type: 'main', implemented: true },
   { id: 'm08', act: 2, n: 8, title: 'The Glow Kitchen', type: 'main', implemented: true },
-  { id: 'op3', act: 2, n: 0, title: 'OP: Dockside Score Attack', type: 'op', implemented: false },
-  { id: 'op4', act: 2, n: 0, title: 'OP: Witness Escort', type: 'op', implemented: false },
+  { id: 'op3', act: 2, n: 0, title: 'OP: Dockside Score Attack', type: 'op', implemented: true },
+  { id: 'op4', act: 2, n: 0, title: 'OP: Witness Escort', type: 'op', implemented: true },
   { id: 'm09', act: 3, n: 9, title: 'Precinct Siege', type: 'main', implemented: true },
   { id: 'm10', act: 3, n: 10, title: 'Evidence Run', type: 'main', implemented: true },
-  { id: 'm11', act: 3, n: 11, title: 'Blackout', type: 'main', implemented: false },
-  { id: 'm12', act: 3, n: 12, title: 'Signal Tower', type: 'main', implemented: false },
-  { id: 'op5', act: 3, n: 0, title: 'OP: Rooftop Sweep', type: 'op', implemented: false },
-  { id: 'op6', act: 3, n: 0, title: 'OP: Riot Line', type: 'op', implemented: false },
-  { id: 'm13', act: 4, n: 13, title: 'The Rig', type: 'main', implemented: false },
-  { id: 'm14', act: 4, n: 14, title: 'Halcyon HQ', type: 'main', implemented: false },
-  { id: 'm15', act: 4, n: 15, title: 'City on Fire', type: 'main', implemented: false },
-  { id: 'm16', act: 4, n: 16, title: 'The Penthouse Grid', type: 'main', implemented: false },
-  { id: 'op7', act: 4, n: 0, title: 'OP: Halcyon Records', type: 'op', implemented: false },
-  { id: 'op8', act: 4, n: 0, title: 'OP: Final Score Attack', type: 'op', implemented: false },
+  { id: 'm11', act: 3, n: 11, title: 'Blackout', type: 'main', implemented: true },
+  { id: 'm12', act: 3, n: 12, title: 'Signal Tower', type: 'main', implemented: true },
+  { id: 'op5', act: 3, n: 0, title: 'OP: Rooftop Sweep', type: 'op', implemented: true },
+  { id: 'op6', act: 3, n: 0, title: 'OP: Riot Line', type: 'op', implemented: true },
+  { id: 'm13', act: 4, n: 13, title: 'The Rig', type: 'main', implemented: true },
+  { id: 'm14', act: 4, n: 14, title: 'Halcyon HQ', type: 'main', implemented: true },
+  { id: 'm15', act: 4, n: 15, title: 'City on Fire', type: 'main', implemented: true },
+  { id: 'm16', act: 4, n: 16, title: 'The Penthouse Grid', type: 'main', implemented: true },
+  { id: 'op7', act: 4, n: 0, title: 'OP: Halcyon Records', type: 'op', implemented: true },
+  { id: 'op8', act: 4, n: 0, title: 'OP: Final Score Attack', type: 'op', implemented: true },
 ];
 
 export const MISSIONS = {
@@ -766,3 +766,744 @@ MISSIONS.m10 = {
 
 // Ops and later missions reuse this framework; each definition slots into
 // MISSIONS as it is built (tracked in DEVELOPMENT_STATE.md).
+
+MISSIONS.op1 = {
+  id: 'op1',
+  title: 'OP1 — CORNER SWEEP',
+  parSec: 180,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Quick op, Grid. Glowline runners are moving product through the alleys behind Marrow.',
+      'Sweep the block, cuff anyone moving weight, and be out before the shift changes.',
+    ],
+  },
+  debriefWin: { speaker: 'DISPATCH', lines: ['Alleys clear. Another notch on the board.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['They slipped the net. Reset and hit it again.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize alley runners', primary: true, type: 'neutralize', count: 4, tag: 'gunman' },
+    { id: 'cuffs', label: 'Optional: Arrest 2 suspects', primary: false, type: 'arrest', count: 2 },
+  ],
+  escalation: null,
+  map: buildMap(24, 16, ({ set, rect, rowFill }) => {
+    rowFill(1, ','); rowFill(14, ',');
+    for (let y = 2; y < 14; y++) { set(1, y, ','); set(22, y, ','); }
+    for (const [x, y] of [[4, 3], [18, 3], [4, 11], [18, 11]]) set(x, y, 'E');
+    set(6, 5, 'C'); set(20, 5, 'C');
+    set(3, 7, 'V'); set(20, 12, 'w');
+    set(2, 7, 'P');
+  }),
+};
+
+MISSIONS.op2 = {
+  id: 'op2',
+  title: 'OP2 — GLOW COURIER',
+  parSec: 210,
+  playerVehicle: { type: 'patrol', x: 4, y: 10 },
+  vehicles: [
+    { type: 'gangbike', x: 28, y: 8, tag: 'courier', ai: 'escort', cruise: 380 },
+    { type: 'gangbike', x: 32, y: 11, tag: 'outrider', ai: 'escort', cruise: 360 },
+    { type: 'gangbike', x: 32, y: 13, tag: 'outrider', ai: 'escort', cruise: 360 },
+  ],
+  traffic: { rows: [3, 5, 9, 11], eastRows: [9, 11], rate: 2.5, max: 5 },
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'A solo courier is burning east on the expressway with a crate of pure GLOW.',
+      'Two outriders screen him. Disable the bikes, run the courier off the road, and seize the crate.',
+      'Civilian traffic is light tonight. Keep it that way.',
+    ],
+  },
+  debriefWin: { speaker: 'DISPATCH', lines: ['Courier stopped. Crate secured. That\'s a clean pull.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The courier made the interchange. Product is gone. Run it back.'] },
+  objectives: [
+    { id: 'clear', label: 'Disable the outriders', primary: true, type: 'neutralize', count: 2, tag: 'outrider' },
+    { id: 'courier', label: 'Stop the courier and seize the crate', primary: true, type: 'boss' },
+    { id: 'civs', label: 'Optional: No commuter casualties', primary: false, type: 'protect', count: 1 },
+  ],
+  boss: {
+    type: 'chemist', x: 90, y: 10, trigger: 'courier', name: 'THE COURIER',
+    intro: 'COURIER: "You\'ll never catch me — I\'m already gone!"',
+    phase2At: 0.5, phase2Banner: 'COURIER DUMPS THE CRATE AND RUNS',
+    phase2Spawns: [],
+    surrenderAt: 0.3,
+  },
+  map: buildMap(120, 16, ({ set, rect, rowFill }) => {
+    rowFill(1, ','); rowFill(2, ',');
+    rowFill(3, '~'); rowFill(4, '~'); rowFill(5, '~');
+    rowFill(6, '=');
+    rowFill(7, '~'); rowFill(8, '~'); rowFill(9, '~');
+    rowFill(10, '~'); rowFill(11, '~'); rowFill(12, '~');
+    rowFill(13, ','); rowFill(14, ',');
+    for (let x = 8; x < 118; x += 16) set(x, 6, '~');
+    set(4, 10, 'P');
+    set(100, 10, 'X');
+  }),
+};
+
+MISSIONS.op3 = {
+  id: 'op3',
+  title: 'OP3 — DOCKSIDE SCORE ATTACK',
+  parSec: 300,
+  signage: 'industrial',
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Pier 9 is quiet tonight — on paper. Off the books, Glowline is moving crates through the container yard.',
+      'Score attack rules: maximize neutralizations and evidence in the time limit. No primary fail state, but the clock is the boss.',
+      'Watch for the crane operator — he drops containers on intruders.',
+    ],
+  },
+  debriefWin: { speaker: 'DISPATCH', lines: ['Yard swept. The scoreboard likes you.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['Time expired. Whatever you got, bag it and report.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize dock crew', primary: true, type: 'neutralize', count: 12, tag: 'gunman' },
+    { id: 'ledger', label: 'Seize shipping manifests', primary: false, type: 'evidence', count: 3 },
+    { id: 'cuffs', label: 'Arrest 5 suspects', primary: false, type: 'arrest', count: 5 },
+    { id: 'civs', label: 'No dock worker casualties', primary: false, type: 'protect', count: 0 },
+  ],
+  escalation: {
+    at: 6,
+    banner: 'SECOND SHIFT CLOCKS IN',
+    spawns: [
+      { type: 'bruiser', x: 2, y: 16 }, { type: 'dealer', x: 3, y: 16 },
+      { type: 'soldier', x: 38, y: 16 }, { type: 'dealer', x: 39, y: 16 },
+    ],
+  },
+  map: buildMap(42, 20, ({ set, rect, rowFill }) => {
+    rowFill(16, ','); rowFill(17, '~'); rowFill(18, '~');
+    for (const [cx, cy] of [[4, 3], [12, 3], [20, 3], [28, 3], [5, 7], [13, 7], [21, 7], [29, 7], [4, 11], [12, 11], [20, 11], [28, 11]]) rect(cx, cy, 4, 2, '#');
+    for (const [x, y] of [[8, 4], [17, 4], [25, 4], [33, 4], [9, 8], [18, 8], [26, 8], [8, 12], [17, 12], [25, 12], [33, 9], [5, 5]]) set(x, y, 'E');
+    for (const [x, y] of [[6, 14], [18, 14], [30, 14], [11, 5]]) set(x, y, 'C');
+    set(2, 12, 'V'); set(34, 4, 'V'); set(36, 8, 'V');
+    set(10, 16, 'w'); set(26, 16, 'p'); set(36, 12, 'm');
+    set(3, 16, 'P');
+  }),
+};
+
+MISSIONS.op4 = {
+  id: 'op4',
+  title: 'OP4 — WITNESS ESCORT',
+  parSec: 360,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'A mid-level Glowline bookkeeper wants out. She\'s holed up in a tenement on 14th.',
+      'Extract her to the safe house at the north edge of the map. Civic Shield patrol cars are circling — they want her silenced.',
+      'She won\'t move fast. You are her shield.',
+    ],
+  },
+  debriefWin: { speaker: 'DISPATCH', lines: ['Witness is in protective custody. Her books open three new investigations.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['She didn\'t make it. Neither did the case.'] },
+  objectives: [
+    { id: 'escort', label: 'Escort the witness to the safe house', primary: true, type: 'reach', tag: 'safehouse' },
+    { id: 'clear', label: 'Neutralize pursuit', primary: true, type: 'neutralize', count: 6, tag: 'gunman' },
+    { id: 'cuffs', label: 'Optional: Arrest 3 pursuers', primary: false, type: 'arrest', count: 3 },
+    { id: 'civs', label: 'Optional: Witness takes zero damage', primary: false, type: 'protect', count: 0 },
+  ],
+  escalation: {
+    at: 3,
+    banner: 'CIVIC SHIELD QRF DEPLOYING',
+    spawns: [
+      { type: 'cs_shield', x: 15, y: 19 }, { type: 'cs_tactical', x: 17, y: 19 },
+      { type: 'cs_shield', x: 19, y: 19 }, { type: 'cs_trooper', x: 16, y: 20 },
+    ],
+  },
+  map: buildMap(34, 22, ({ set, rect, rowFill }) => {
+    rowFill(6, '#');
+    rect(8, 6, 3, 1, '.'); rect(24, 6, 3, 1, '.');
+    rect(11, 1, 1, 5, '#'); rect(22, 1, 1, 5, '#');
+    set(3, 2, 'V'); set(30, 2, 'V');
+    rect(2, 3, 2, 2, 's'); rect(30, 3, 2, 2, 's');
+    set(6, 3, 'E'); set(27, 3, 'E');
+    for (const [cx, cy] of [[6, 9], [12, 9], [20, 9], [26, 9], [9, 13], [16, 13], [23, 13]]) { set(cx, cy, 'c'); set(cx + 2, cy, 'c'); }
+    set(4, 11, 'C'); set(29, 11, 'C'); set(13, 15, 'C'); set(21, 15, 'C');
+    set(8, 10, 'E'); set(18, 10, 'E'); set(28, 10, 'E');
+    set(6, 14, 'E'); set(15, 14, 'E'); set(25, 14, 'E');
+    set(11, 16, 'E'); set(23, 16, 'E');
+    rowFill(17, '#');
+    rect(14, 17, 7, 1, '.');
+    rowFill(20, ',');
+    set(4, 19, 'P'); set(30, 19, 'w');
+    set(17, 2, 'X');
+    set(17, 18, 'C');
+  }),
+};
+
+MISSIONS.m11 = {
+  id: 'm11',
+  title: 'M11 — BLACKOUT',
+  parSec: 480,
+  blackout: true,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'City grid just went dark. Halcyon hit the substation on 4th and Main — this was planned.',
+      'Glowline crews are moving product under cover of the blackout. Your NVGs work; theirs don\'t.',
+      'The substation control room has the switch to kill their night vision advantage. Reach it.',
+      'Boss on site: a Glowline enforcer called MIDNIGHT\'s lieutenant. Calls himself SHIVER. Wait — different SHIVER. This one\'s VOID.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Lights coming back up. Glowline\'s night move is shattered.',
+      'VOID\'s comms unit has coordinates for a signal tower — they\'re coordinating the city-wide push from there.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The dark swallowed you. Grid goes back up — they\'ll be gone.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize blackout crew', primary: true, type: 'neutralize', count: 8, tag: 'gunman' },
+    { id: 'power', label: 'Reach the substation control room', primary: true, type: 'reach', tag: 'control' },
+    { id: 'boss', label: 'Take down VOID', primary: true, type: 'boss' },
+    { id: 'cuffs', label: 'Optional: Arrest 3 suspects', primary: false, type: 'arrest', count: 3 },
+    { id: 'civs', label: 'Optional: No civilians lost in the dark', primary: false, type: 'protect', count: 0 },
+  ],
+  escalation: {
+    at: 4,
+    banner: 'GLOWLINE NIGHT OPS FLOOD THE SECTOR',
+    spawns: [
+      { type: 'dealer', x: 2, y: 2 }, { type: 'soldier', x: 3, y: 2 },
+      { type: 'bruiser', x: 30, y: 2 }, { type: 'dealer', x: 29, y: 2 },
+    ],
+  },
+  boss: {
+    type: 'shiver', x: 16, y: 2, name: 'VOID',
+    intro: 'VOID: "You can\'t arrest what you can\'t see."',
+    phase2At: 0.5, phase2Banner: 'VOID KILLS THE EMERGENCY LIGHTS',
+    phase2Spawns: [{ type: 'vipguard', x: 12, y: 4 }, { type: 'vipguard', x: 20, y: 4 }],
+    surrenderAt: 0.15,
+  },
+  map: buildMap(34, 18, ({ set, rect, rowFill }) => {
+    rowFill(5, '#');
+    rect(14, 5, 6, 1, '.'); // control room door
+    rect(11, 1, 1, 4, '#'); rect(22, 1, 1, 4, '#');
+    set(3, 2, 'V'); set(30, 2, 'V'); // intel
+    rect(2, 2, 2, 2, 's'); rect(30, 2, 2, 2, 's');
+    set(6, 2, 'E'); set(27, 2, 'E');
+    // substation floor
+    for (let x = 4; x <= 29; x += 3) for (let y = 7; y <= 10; y += 2) set(x, y, 'c');
+    set(8, 8, 'E'); set(15, 8, 'E'); set(22, 8, 'E');
+    set(14, 10, 'E'); set(18, 10, 'E');
+    set(5, 7, 'E'); set(25, 7, 'E'); // +2 more enemies
+    // civilians hiding
+    set(5, 13, 'C'); set(28, 13, 'C'); set(12, 15, 'C'); set(21, 15, 'C');
+    rowFill(12, '#');
+    rect(15, 12, 4, 1, '.');
+    rowFill(13, ','); rowFill(14, ',');
+    set(16, 14, 'P'); set(17, 14, 'm');
+    set(16, 6, 'X'); // control room
+  }),
+};
+
+MISSIONS.m12 = {
+  id: 'm12',
+  title: 'M12 — SIGNAL TOWER',
+  parSec: 540,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'VOID\'s comms unit points here: the Halcyon Signal Tower on the ridge.',
+      'This is the nerve center — every Glowline op in the city pings through this relay.',
+      'The tower is defended by Civic Shield tactical teams. They\'ve gone full mercenary.',
+      'Top of the tower: a Halcyon director. She calls herself CHEMIST\'s handler. Take the tower, break the network.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Tower secured. The relay logs show every Glowline shipment, every payoff, every Halcyon invoice.',
+      'The director\'s drive names the money men downtown. Act Four starts now.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['Tower holds. The network adapts. We go again.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize tower defense', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
+    { id: 'boss', label: 'Take down DIRECTOR VANCE', primary: true, type: 'boss' },
+    { id: 'server', label: 'Optional: Access the server core', primary: false, type: 'reach', tag: 'server' },
+    { id: 'cuffs', label: 'Optional: Arrest 4 defenders', primary: false, type: 'arrest', count: 4 },
+    { id: 'ledger', label: 'Optional: Seize the relay logs + payoff ledger', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'HELO INSERTION — SHIELD REINFORCEMENTS',
+    spawns: [
+      { type: 'cs_tactical', x: 2, y: 2 }, { type: 'cs_shield', x: 3, y: 2 },
+      { type: 'cs_tactical', x: 30, y: 2 }, { type: 'cs_shield', x: 29, y: 2 },
+    ],
+  },
+  boss: {
+    type: 'chemist', x: 16, y: 2, name: 'DIRECTOR VANCE',
+    intro: 'DIRECTOR VANCE: "You\'re disrupting a very valuable portfolio, officers."',
+    phase2At: 0.5, phase2Banner: 'VANCE ACTIVATES THE TOWER\'S DEFENSE GRID',
+    phase2Spawns: [{ type: 'cs_shield', x: 12, y: 4 }, { type: 'cs_tactical', x: 20, y: 4 }],
+    surrenderAt: 0.2,
+  },
+  map: buildMap(34, 18, ({ set, rect, rowFill }) => {
+    // Tower base
+    rowFill(5, '#');
+    rect(14, 5, 6, 1, '.');
+    rect(11, 1, 1, 4, '#'); rect(22, 1, 1, 4, '#');
+    set(3, 2, 'V'); set(30, 2, 'V');
+    rect(2, 2, 2, 2, 's'); rect(30, 2, 2, 2, 's');
+    set(6, 2, 'E'); set(27, 2, 'E');
+    // Tower ascent - catwalks
+    for (let y = 7; y <= 11; y += 2) rowFill(y, '.');
+    for (let x = 5; x <= 28; x += 4) for (let y = 7; y <= 11; y += 2) set(x, y, 'c');
+    // Defenders on catwalks
+    set(9, 7, 'E'); set(17, 7, 'E'); set(25, 7, 'E');
+    set(7, 9, 'E'); set(15, 9, 'E'); set(23, 9, 'E');
+    set(11, 11, 'E'); set(19, 11, 'E');
+    set(5, 7, 'E'); set(21, 9, 'E'); // +2 more enemies = 10 total
+    // Server core
+    rect(14, 11, 6, 1, '#');
+    set(16, 11, '.'); set(17, 11, 'X');
+    // Top platform - boss
+    rowFill(14, '#');
+    rect(14, 14, 6, 1, '.');
+    rowFill(15, ','); rowFill(16, ',');
+    set(2, 15, 'P'); set(30, 15, 'm');
+    set(5, 15, 'V'); set(28, 15, 'V'); // evidence pickups
+  }),
+};
+
+MISSIONS.op5 = {
+  id: 'op5',
+  title: 'OP5 — ROOFTOP SWEEP',
+  parSec: 240,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Glowline snipers took positions on the rooftops overlooking the precinct.',
+      'Clear them before the shift change. Fast, quiet, no civilians on the roofs.',
+    ],
+  },
+  debriefWin: { speaker: 'DISPATCH', lines: ['Rooftops clear. Precinct sightlines secured.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['Snipers displaced. They\'ll be back.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize rooftop snipers', primary: true, type: 'neutralize', count: 6, tag: 'gunman' },
+    { id: 'cuffs', label: 'Optional: Arrest 2', primary: false, type: 'arrest', count: 2 },
+  ],
+  escalation: null,
+  map: buildMap(30, 14, ({ set, rect, rowFill }) => {
+    rowFill(1, '#'); rowFill(2, '.');
+    for (let x = 3; x < 27; x += 4) rect(x, 2, 1, 3, '#');
+    set(4, 3, 'E'); set(12, 3, 'E'); set(20, 3, 'E');
+    set(8, 4, 'E'); set(16, 4, 'E'); set(24, 4, 'E');
+    rowFill(6, '#');
+    rowFill(7, ','); rowFill(8, ','); rowFill(9, ',');
+    rowFill(10, '.'); rowFill(11, '.'); rowFill(12, '.');
+    set(2, 9, 'P'); set(28, 9, 'w');
+  }),
+};
+
+MISSIONS.op6 = {
+  id: 'op6',
+  title: 'OP6 — RIOT LINE',
+  parSec: 300,
+  enemyPool: ['cs_trooper', 'cs_tactical', 'cs_shield'],
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Civic Shield is running a "public order" line downtown. It\'s a shield wall for Glowline extraction.',
+      'Break the line, arrest the commanders, and the extraction collapses.',
+      'Civilians are caught between. Minimize casualties.',
+    ],
+  },
+  debriefWin: { speaker: 'DISPATCH', lines: ['Line broken. Extraction failed. The press is already calling it a police victory.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The line held. Civilians caught in the middle. Regroup.'] },
+  objectives: [
+    { id: 'clear', label: 'Break the shield wall', primary: true, type: 'neutralize', count: 8, tag: 'gunman' },
+    { id: 'boss', label: 'Take down the line commander', primary: true, type: 'boss' },
+    { id: 'cuffs', label: 'Optional: Arrest 4 shield officers', primary: false, type: 'arrest', count: 4 },
+    { id: 'civs', label: 'Optional: Zero civilian casualties', primary: false, type: 'protect', count: 0 },
+  ],
+  escalation: {
+    at: 4,
+    banner: 'SECOND RANK DEPLOYS',
+    spawns: [
+      { type: 'cs_shield', x: 14, y: 18 }, { type: 'cs_tactical', x: 17, y: 18 },
+      { type: 'cs_shield', x: 20, y: 18 }, { type: 'cs_trooper', x: 16, y: 19 },
+    ],
+  },
+  boss: {
+    type: 'wrecker', x: 17, y: 2, name: 'COMMANDER HESTER',
+    intro: 'COMMANDER HESTER: "This is a lawful assembly. Disperse or be dispersed."',
+    phase2At: 0.5, phase2Banner: 'HESTER CALLS FOR PRECISION FIRE',
+    phase2Spawns: [{ type: 'cs_tactical', x: 12, y: 5 }, { type: 'cs_tactical', x: 22, y: 5 }],
+    surrenderAt: 0.25,
+  },
+  map: buildMap(36, 22, ({ set, rect, rowFill }) => {
+    rowFill(4, '#');
+    rect(15, 4, 6, 1, '.');
+    rowFill(7, '.'); rowFill(10, '.'); rowFill(13, '.');
+    for (let x = 4; x < 32; x += 5) { set(x, 7, 'c'); set(x, 10, 'c'); set(x, 13, 'c'); }
+    set(8, 7, 'E'); set(16, 7, 'E'); set(24, 7, 'E');
+    set(6, 10, 'E'); set(14, 10, 'E'); set(22, 10, 'E'); set(30, 10, 'E');
+    set(10, 13, 'E'); set(18, 13, 'E'); set(26, 13, 'E');
+    set(4, 8, 'C'); set(14, 8, 'C'); set(24, 8, 'C');
+    set(6, 11, 'C'); set(16, 11, 'C'); set(26, 11, 'C');
+    rowFill(16, '#');
+    rect(14, 16, 8, 1, '.');
+    rowFill(19, ',');
+    set(3, 17, 'P'); set(32, 17, 'm');
+    set(17, 3, 'X');
+  }),
+};
+
+MISSIONS.m13 = {
+  id: 'm13',
+  title: 'M13 — THE RIG',
+  parSec: 540,
+  signage: 'industrial',
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The relay logs from the Signal Tower point offshore — Halcyon\'s "wellness" platform, The Rig.',
+      'It sits in international waters, but the product pipeline runs through it. We have a warrant. Barely.',
+      'The platform is a fortress. Helipad, submarine pen, and a director who thinks diplomatic immunity applies to drug trafficking.',
+      'Her name is GRAFT. No — different GRAFT. This one calls herself THE CHEMIST\'s successor. She goes by WRACK.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The Rig is listing. WRACK is in custody. The submarine pen had a manifest — every Halcyon shell company, every dirty account.',
+      'The money leads to Halcyon HQ downtown. The penthouse. This ends tonight.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The Rig sails on. The paper trail burns. We lost the thread.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize platform security', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
+    { id: 'boss', label: 'Take down WRACK', primary: true, type: 'boss' },
+    { id: 'pen', label: 'Optional: Reach the submarine pen', primary: false, type: 'reach', tag: 'pen' },
+    { id: 'cuffs', label: 'Optional: Arrest 4 security', primary: false, type: 'arrest', count: 4 },
+    { id: 'ledger', label: 'Optional: Seize the manifest + the crypto keys', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'HELO QRF FROM THE MAINLAND',
+    spawns: [
+      { type: 'cs_tactical', x: 2, y: 16 }, { type: 'cs_shield', x: 3, y: 16 },
+      { type: 'cs_tactical', x: 38, y: 16 }, { type: 'cs_shield', x: 39, y: 16 },
+    ],
+  },
+  boss: {
+    type: 'wrecker', x: 21, y: 3, name: 'WRACK',
+    intro: 'WRACK: "You have jurisdiction over nothing. This platform is a sovereign asset."',
+    phase2At: 0.5, phase2Banner: 'WRACK DETACHES THE HELIPAD',
+    phase2Spawns: [{ type: 'cs_shield', x: 14, y: 6 }, { type: 'cs_tactical', x: 28, y: 6 }],
+    surrenderAt: 0.15,
+  },
+  map: buildMap(42, 20, ({ set, rect, rowFill }) => {
+    rowFill(4, '#');
+    rect(18, 4, 6, 1, '.');
+    for (let y = 6; y <= 14; y += 2) rowFill(y, '.');
+    for (let x = 5; x <= 36; x += 4) for (let y = 6; y <= 14; y += 2) set(x, y, 'c');
+    set(8, 6, 'E'); set(16, 6, 'E'); set(24, 6, 'E'); set(32, 6, 'E');
+    set(10, 8, 'E'); set(18, 8, 'E'); set(26, 8, 'E'); set(34, 8, 'E');
+    set(12, 10, 'E'); set(20, 10, 'E'); set(28, 10, 'E');
+    set(14, 12, 'E'); set(22, 12, 'E');
+    set(18, 14, 'E');
+    rect(18, 14, 6, 1, '#');
+    rect(19, 15, 4, 1, 'X');
+    rowFill(17, ','); rowFill(18, ',');
+    set(3, 17, 'P'); set(38, 17, 'm');
+    set(5, 17, 'V'); set(35, 17, 'V'); // evidence pickups
+  }),
+};
+
+MISSIONS.m14 = {
+  id: 'm14',
+  title: 'M14 — HALCYON HQ',
+  parSec: 600,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The Rig\'s manifest leads here: Halcyon Wellness headquarters. Glass tower, private security, and a penthouse boardroom where the city\'s fate is auctioned.',
+      'Civic Shield has the lobby locked down. We\'re going in the service entrance — elevator shaft, maintenance floors, then up.',
+      'The board is in session. Every name on that Rig manifest is in that room. Arrest them all.',
+      'The CEO calls himself THE ARCHITECT. He built this city\'s sickness. Tonight we demolish it.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Halcyon HQ is ours. The board is in cuffs. The Architect\'s testimony will bury every politician on his payroll.',
+      'One last loose end: the penthouse server grid. It\'s still broadcasting. Shut it down and the city breathes again.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The tower holds. The money wins tonight. We come back at dawn.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize Halcyon security', primary: true, type: 'neutralize', count: 12, tag: 'gunman' },
+    { id: 'boss', label: 'Take down THE ARCHITECT', primary: true, type: 'boss' },
+    { id: 'server', label: 'Reach the penthouse server grid', primary: true, type: 'reach', tag: 'server' },
+    { id: 'cuffs', label: 'Optional: Arrest 6 executives', primary: false, type: 'arrest', count: 6 },
+    { id: 'ledger', label: 'Optional: Seize the master ledger + encryption keys', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 6,
+    banner: 'PENTHOUSE BLAST DOORS SEAL — INTERNAL DEFENSES ONLINE',
+    spawns: [
+      { type: 'cs_tactical', x: 2, y: 2 }, { type: 'cs_shield', x: 3, y: 2 },
+      { type: 'cs_tactical', x: 30, y: 2 }, { type: 'cs_shield', x: 31, y: 2 },
+    ],
+  },
+  boss: {
+    type: 'graft', x: 16, y: 2, name: 'THE ARCHITECT',
+    intro: 'THE ARCHITECT: "You\'re not police. You\'re a symptom. I\'ll prescribe the cure."',
+    phase2At: 0.5, phase2Banner: 'THE ARCHITECT ACTIVATES THE BUILDING AI',
+    phase2Spawns: [{ type: 'cs_shield', x: 10, y: 5 }, { type: 'cs_tactical', x: 22, y: 5 }],
+    surrenderAt: 0.1,
+  },
+  map: buildMap(34, 20, ({ set, rect, rowFill }) => {
+    rowFill(4, '#');
+    rect(14, 4, 6, 1, '.');
+    for (let y = 5; y <= 14; y += 3) {
+      rowFill(y, '.');
+      for (let x = 4; x <= 29; x += 5) set(x, y, 'c');
+    }
+    set(6, 5, 'E'); set(14, 5, 'E'); set(22, 5, 'E'); set(30, 5, 'E');
+    set(8, 8, 'E'); set(16, 8, 'E'); set(24, 8, 'E');
+    set(10, 11, 'E'); set(18, 11, 'E'); set(26, 11, 'E');
+    set(12, 14, 'E'); set(20, 14, 'E');
+    set(4, 8, 'E'); // +1 extra enemy for validation
+    rowFill(17, '#');
+    rect(14, 17, 6, 1, '.');
+    rowFill(18, '.');
+    set(16, 18, 'X');
+    rowFill(19, ',');
+    set(2, 18, 'P'); set(30, 18, 'm'); // player spawn on row 18 (interior)
+    set(3, 5, 'V'); set(30, 5, 'V'); // evidence
+  }),
+};
+
+MISSIONS.m15 = {
+  id: 'm15',
+  title: 'M15 — CITY ON FIRE',
+  parSec: 360,
+  playerVehicle: { type: 'patrol', x: 4, y: 10 },
+  vehicles: [
+    { type: 'armoured', x: 28, y: 8, tag: 'truck', ai: 'convoy', cruise: 180 },
+    { type: 'gangcar', x: 32, y: 7, tag: 'escort', ai: 'escort', cruise: 280 },
+    { type: 'gangcar', x: 32, y: 12, tag: 'escort', ai: 'escort', cruise: 280 },
+    { type: 'gangbike', x: 36, y: 9, tag: 'outrider', ai: 'escort', cruise: 350 },
+    { type: 'gangbike', x: 36, y: 13, tag: 'outrider', ai: 'escort', cruise: 350 },
+  ],
+  traffic: { rows: [3, 5, 9, 11], eastRows: [9, 11], rate: 3.0, max: 6 },
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The Architect\'s arrest triggered a dead-man switch. Halcyon is burning the city\'s data centers — and the evidence inside them.',
+      'A convoy of armoured trucks is racing for the highway, loaded with server racks. If they reach the interchange, the data scatters to a thousand shell companies.',
+      'You have the interceptor. The city is burning — riots, fires, Civic Shield deserting posts. Drive through it.',
+      'At the river crossing you have a choice: the BRIDGE (fast, exposed, heavy resistance) or the TUNNEL (slow, tight, spike strips). Choose your line.',
+      'The convoy commander is a mercenary called THE WRECKER. He\'s been waiting for this payday.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Convoy stopped. Server racks secured. The Architect\'s dead-man switch just became our evidence locker.',
+      'The city is still burning, but the fire has a perimeter now. One last op: the penthouse grid.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The convoy crossed the river. The data is gone. The city burns for nothing.'] },
+  objectives: [
+    { id: 'clear', label: 'Disable the convoy screen', primary: true, type: 'neutralize', count: 4, tag: 'escort' },
+    { id: 'boss', label: 'Stop the convoy and take down THE WRECKER', primary: true, type: 'boss' },
+    { id: 'route', label: 'Choose your line: Bridge or Tunnel', primary: true, type: 'reach', tag: 'route' },
+    { id: 'cuffs', label: 'Optional: Arrest 2 mercenaries', primary: false, type: 'arrest', count: 2 },
+    { id: 'civs', label: 'Optional: Minimize collateral damage', primary: false, type: 'protect', count: 2 },
+  ],
+  escalation: {
+    at: 2,
+    atVanFrac: 0.4,
+    banner: 'THE WRECKER COMMITS HIS RESERVES',
+    spawns: [],
+    vehicles: [
+      { type: 'armoured', x: 8, y: 10, tag: 'wrecker', ai: 'escort', cruise: 300 },
+    ],
+  },
+  boss: {
+    type: 'wrecker', x: 100, y: 10, trigger: 'wrecker', name: 'THE WRECKER',
+    intro: 'THE WRECKER: "Nine hundred wrecks and never a scratch on me. You get to be nine-oh-one."',
+    phase2At: 0.5, phase2Banner: 'THE WRECKER TEARS OFF HIS DOOR AS A SHIELD',
+    phase2Spawns: [],
+    surrenderAt: 0.2,
+  },
+  map: buildMap(140, 16, ({ set, rect, rowFill }) => {
+    rowFill(1, ','); rowFill(2, ',');
+    rowFill(3, '~'); rowFill(4, '~'); rowFill(5, '~');
+    rowFill(6, '=');
+    for (let x = 10; x < 138; x += 18) set(x, 6, '~');
+    rowFill(7, '~'); rowFill(8, '~'); rowFill(9, '~');
+    rowFill(10, '~'); rowFill(11, '~'); rowFill(12, '~');
+    rowFill(13, ','); rowFill(14, ',');
+    // Bridge path (top lanes) - exposed, enemies
+    for (let x = 30; x < 80; x += 4) { set(x, 3, '^'); set(x, 4, '^'); }
+    set(50, 3, 'E'); set(55, 3, 'E'); set(60, 3, 'E'); set(65, 3, 'E');
+    // Tunnel path (bottom lanes) - tight, spike strips
+    for (let x = 30; x < 80; x += 6) { set(x, 11, '^'); set(x, 12, '^'); }
+    set(50, 12, 'E'); set(60, 12, 'E');
+    set(4, 10, 'P');
+    set(110, 10, 'X'); // route choice gate
+    set(125, 10, 'X'); // end gate
+    for (let x = 16; x < 138; x += 31) { set(x, 1, 'c'); set(x + 4, 14, 'c'); }
+  }),
+};
+
+MISSIONS.m16 = {
+  id: 'm16',
+  title: 'M16 — THE PENTHOUSE GRID',
+  parSec: 600,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The server racks from the convoy point here: the Penthouse Grid. A fortress atop the Halcyon tower, air-gapped, hardened, and broadcasting the city\'s secrets to the highest bidder.',
+      'The Architect gave up the access codes under pressure. We have a window — minutes before the encryption rotates.',
+      'Civic Shield\'s inner circle is here. GRAFT survived the precinct. He\'s making his last stand with the city\'s elite as human shields.',
+      'End this. Shut down the Grid. Arrest everyone. The city watches.',
+    ],
+  },
+  debriefWin: {
+    speaker: 'DISPATCH',
+    lines: [
+      'The Grid is dark. The broadcast is cut. The Architect\'s empire is in evidence bags.',
+      'GRAFT is in custody. The Civic Shield charter is revoked. Halcyon Wellness is seized.',
+      'Vice Grid, you didn\'t just win a case. You broke the machine.',
+      'The city exhales. Good work, officers. Good work.',
+    ],
+  },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The Grid holds. The machine keeps grinding. We regroup at dawn.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize the inner circle', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
+    { id: 'boss', label: 'Take down GRAFT', primary: true, type: 'boss' },
+    { id: 'grid', label: 'Shut down the Penthouse Grid', primary: true, type: 'reach', tag: 'grid' },
+    { id: 'cuffs', label: 'Optional: Arrest 5 executives', primary: false, type: 'arrest', count: 5 },
+    { id: 'ledger', label: 'Optional: Seize the final ledger + encryption keys', primary: false, type: 'evidence', count: 2 },
+  ],
+  escalation: {
+    at: 5,
+    banner: 'GRAFT\'S PERSONAL DETAIL DEPLOYS',
+    spawns: [
+      { type: 'cs_shield', x: 2, y: 2 }, { type: 'cs_tactical', x: 3, y: 2 },
+      { type: 'cs_shield', x: 30, y: 2 }, { type: 'cs_tactical', x: 31, y: 2 },
+    ],
+  },
+  boss: {
+    type: 'graft', x: 16, y: 2, name: 'GRAFT',
+    intro: 'GRAFT: "Twenty-two years I kept this city quiet. You two are just the latest noise."',
+    phase2At: 0.5, phase2Banner: 'GRAFT UNLOCKS THE VAULT — HEAVY ARMOR DEPLOYS',
+    phase2Spawns: [{ type: 'cs_shield', x: 10, y: 5 }, { type: 'cs_shield', x: 22, y: 5 }],
+    surrenderAt: 0.1,
+  },
+  map: buildMap(34, 20, ({ set, rect, rowFill }) => {
+    rowFill(4, '#');
+    rect(14, 4, 6, 1, '.');
+    for (let y = 5; y <= 13; y += 2) {
+      rowFill(y, '.');
+      for (let x = 4; x <= 29; x += 5) set(x, y, 'c');
+    }
+    set(6, 5, 'E'); set(14, 5, 'E'); set(22, 5, 'E'); set(30, 5, 'E');
+    set(8, 7, 'E'); set(16, 7, 'E'); set(24, 7, 'E');
+    set(10, 9, 'E'); set(18, 9, 'E'); set(26, 9, 'E');
+    set(12, 11, 'E'); set(20, 11, 'E');
+    set(14, 13, 'E'); set(18, 13, 'E');
+    rowFill(15, '#');
+    rect(14, 15, 6, 1, '.');
+    rowFill(16, '.');
+    set(16, 16, 'X');
+    rowFill(17, ','); rowFill(18, ',');
+    set(2, 17, 'P'); set(30, 17, 'm');
+    set(3, 5, 'V'); set(30, 5, 'V');
+    set(5, 18, 'w'); set(28, 18, 'p');
+  }),
+};
+
+MISSIONS.op7 = {
+  id: 'op7',
+  title: 'OP7 — HALCYON RECORDS',
+  parSec: 300,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Post-op cleanup. Halcyon\'s physical archives are in a sub-basement vault.',
+      'Grab everything. Financials, R&D, the "wellness" trial data. Score attack — maximize evidence in the time limit.',
+    ],
+  },
+  debriefWin: { speaker: 'DISPATCH', lines: ['Archives secured. The paper trail is complete.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['Time up. Whatever\'s left burns.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize vault security', primary: true, type: 'neutralize', count: 8, tag: 'gunman' },
+    { id: 'ledger', label: 'Seize archive boxes', primary: true, type: 'evidence', count: 5 },
+    { id: 'cuffs', label: 'Optional: Arrest 3', primary: false, type: 'arrest', count: 3 },
+  ],
+  escalation: null,
+  map: buildMap(30, 16, ({ set, rect, rowFill }) => {
+    rowFill(3, '#');
+    rect(12, 3, 6, 1, '.');
+    for (let y = 5; y <= 11; y += 2) {
+      rowFill(y, '.');
+      for (let x = 4; x <= 25; x += 4) set(x, y, 's');
+    }
+    set(6, 5, 'E'); set(14, 5, 'E'); set(22, 5, 'E');
+    set(8, 7, 'E'); set(16, 7, 'E'); set(24, 7, 'E');
+    set(10, 9, 'E'); set(18, 9, 'E');
+    set(12, 11, 'E');
+    set(3, 5, 'V'); set(26, 5, 'V'); set(5, 7, 'V'); set(24, 7, 'V'); set(14, 9, 'V');
+    rowFill(13, '#');
+    rect(12, 13, 6, 1, '.');
+    rowFill(14, ','); rowFill(15, ',');
+    set(2, 14, 'P'); set(27, 14, 'm');
+  }),
+};
+
+MISSIONS.op8 = {
+  id: 'op8',
+  title: 'OP8 — FINAL SCORE ATTACK',
+  parSec: 420,
+  briefing: {
+    speaker: 'DISPATCH',
+    lines: [
+      'Campaign over. This is the victory lap — or the victory grind.',
+      'Every remaining Glowline stash house, every Civic Shield safehouse, every Halcyon drop point. One map. No par time. Just the scoreboard.',
+      'Go until you drop. The city is yours.',
+    ],
+  },
+  debriefWin: { speaker: 'DISPATCH', lines: ['Top of the board. The city is clean. For now.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['Run it back. The board resets.'] },
+  objectives: [
+    { id: 'clear', label: 'Neutralize all hostiles', primary: true, type: 'neutralize', count: 20, tag: 'gunman' },
+    { id: 'ledger', label: 'Seize all evidence', primary: true, type: 'evidence', count: 8 },
+    { id: 'cuffs', label: 'Arrest everyone', primary: false, type: 'arrest', count: 10 },
+    { id: 'civs', label: 'Zero civilian casualties', primary: false, type: 'protect', count: 0 },
+  ],
+  escalation: {
+    at: 10,
+    banner: 'ENDLESS WAVE',
+    spawns: [
+      { type: 'cs_tactical', x: 2, y: 2 }, { type: 'cs_shield', x: 3, y: 2 },
+      { type: 'bruiser', x: 30, y: 2 }, { type: 'dealer', x: 31, y: 2 },
+    ],
+  },
+  map: buildMap(34, 20, ({ set, rect, rowFill }) => {
+    for (let y = 3; y <= 15; y += 2) {
+      rowFill(y, '.');
+      for (let x = 4; x <= 29; x += 4) set(x, y, y % 4 === 1 ? 'c' : 's');
+    }
+    for (let y = 3; y <= 15; y += 3) {
+      set(6, y, 'E'); set(14, y, 'E'); set(22, y, 'E'); set(30, y, 'E');
+    }
+    set(10, 6, 'E'); // +1 extra enemy for validation
+    set(3, 3, 'V'); set(30, 3, 'V');
+    set(5, 7, 'V'); set(28, 7, 'V');
+    set(10, 11, 'V'); set(23, 11, 'V');
+    set(16, 15, 'V');
+    set(14, 7, 'V'); // +1 extra evidence for validation (8 total)
+    rowFill(17, '#');
+    rect(14, 17, 6, 1, '.');
+    rowFill(18, ','); 
+    set(2, 18, 'P'); set(31, 18, 'm');
+  }),
+};

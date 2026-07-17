@@ -102,6 +102,19 @@
     background: radial-gradient(ellipse at center, transparent 42%, rgba(255,30,30,.75) 100%);
     transition: opacity .09s linear;
   }
+  .tire-burst {
+    position: absolute;
+    width: 40px; height: 40px;
+    background: radial-gradient(circle, rgba(255,180,60,0.9) 0%, rgba(255,100,20,0.6) 40%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 5;
+    animation: burst 0.4s ease-out forwards;
+  }
+  @keyframes burst {
+    0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(2.5); }
+  }
   #banner {
     position: absolute; top: 22%; left: 50%; transform: translateX(-50%) scale(.9);
     font-size: 2rem; letter-spacing: .3em; color: var(--red); font-weight: 700;
@@ -163,6 +176,16 @@
     <button id="btn-agent-back">Back</button>
   </section>
 
+  <section class="screen" id="screen-recap">
+    <div class="panel" style="max-width: 720px; text-align: left;">
+      <h2 id="recap-title" style="margin:0 0 12px; color:var(--gold);">STORY SO FAR</h2>
+      <div id="recap-body" style="line-height:1.7; margin-bottom:16px;"></div>
+      <div id="recap-flags" style="font-size:.85rem; color:#b9c4d4; margin-bottom:16px;"></div>
+      <p class="hint" id="recap-next"></p>
+    </div>
+    <button id="btn-recap-continue">Continue to Briefing</button>
+  </section>
+
   <section class="screen" id="screen-briefing">
     <div class="panel">
       <h2 id="briefing-title"></h2>
@@ -192,9 +215,11 @@
       <div id="results-debrief"></div>
       <table id="results-stats"></table>
     </div>
-    <button id="btn-next">Next mission</button>
-    <button id="btn-retry">Retry from checkpoint</button>
-    <button id="btn-results-menu">Main menu</button>
+    <div id="results-actions">
+      <button id="btn-next">Next mission</button>
+      <button id="btn-retry">Retry from checkpoint</button>
+      <button id="btn-results-menu">Main menu</button>
+    </div>
   </section>
 
   <section class="screen" id="screen-missions">
@@ -225,6 +250,16 @@
     <div class="panel" id="controls-body"></div>
     <button id="btn-controls-reset">Restore defaults</button>
     <button id="btn-controls-back">Back</button>
+  </section>
+
+  <section class="screen" id="screen-ending">
+    <div class="panel" style="max-width: 720px; text-align: center;">
+      <h2 id="ending-title" style="margin:0 0 12px;"></h2>
+      <p id="ending-body" style="line-height:1.6; margin:0 0 16px;"></p>
+      <div id="ending-stats" style="font-size:.9rem; color:#b9c4d4; margin-bottom:16px;"></div>
+      <button id="btn-ending-ngplus" style="display:none;">Start New Game+</button>
+      <button id="btn-ending-menu">Main Menu</button>
+    </div>
   </section>
 
   <section class="screen" id="screen-credits">

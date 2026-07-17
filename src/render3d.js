@@ -14,6 +14,9 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
 import { TILE } from './world.js';
 import { WEAPONS } from './combat.js';
 import { VEHICLE_TYPES } from './vehicles.js';
@@ -34,6 +37,82 @@ const SIGN_SETS = {
 };
 const SKINS = ['#e8c39e', '#c68e5f', '#8d5524', '#f1d5b8', '#a56a3f'];
 const CIV_OUTFITS = ['#8d95a8', '#a89b8d', '#7d96a0', '#a08d99', '#96a08d', '#9a8da8'];
+
+// ---------------------------------------------------------------- post FX shaders
+
+// Color grading shader — noir look computed procedurally per pixel.
+// Written in three's GLSL1 dialect (varying/texture2D/gl_FragColor): three
+// prepends its own "#version 300 es" preamble under WebGL2, so shader source
+// must not carry a version directive or raw GLSL3 in/out declarations.
+const ColorGradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    intensity: { value: 1.0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float intensity;
+    varying vec2 vUv;
+    void main() {
+      vec3 col = texture2D(tDiffuse, vUv).rgb;
+      // Noir grade: desaturate + cool tint, with a gentle contrast pivot at
+      // 0.18 (night-scene mid-grey). An S-curve pivoted at 0.5 crushes a dark
+      // game to black — nearly every pixel sits below 0.5 here.
+      float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      vec3 g = mix(col, vec3(lum), 0.3);
+      g = (g - 0.18) * 1.12 + 0.18;
+      g *= vec3(0.95, 0.98, 1.06);
+      gl_FragColor = vec4(mix(col, clamp(g, 0.0, 1.0), intensity), 1.0);
+    }
+  `,
+};
+
+// Vignette + Chromatic Aberration shader
+const VignetteCAShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    vignetteStrength: { value: 0.45 },
+    vignetteRadius: { value: 1.3 },
+    vignetteSmoothness: { value: 0.55 },
+    caStrength: { value: 0.0006 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float vignetteStrength;
+    uniform float vignetteRadius;
+    uniform float vignetteSmoothness;
+    uniform float caStrength;
+    varying vec2 vUv;
+    void main() {
+      vec2 center = vUv - 0.5;
+      float dist = length(center) * vignetteRadius;
+      float vig = smoothstep(vignetteRadius * (1.0 - vignetteSmoothness), vignetteRadius, dist);
+      float vignette = 1.0 - vig * vignetteStrength;
+
+      // Chromatic aberration: shift R/B channels outward from center
+      vec2 offset = center * caStrength;
+      float r = texture2D(tDiffuse, vUv + offset).r;
+      float g = texture2D(tDiffuse, vUv).g;
+      float b = texture2D(tDiffuse, vUv - offset).b;
+
+      gl_FragColor = vec4(vec3(r, g, b) * vignette, 1.0);
+    }
+  `,
+};
 
 // ---------------------------------------------------------------- labels
 //
@@ -143,8 +222,18 @@ function init(canvas) {
   rim.position.set(500, 260, 400);
   scene.add(rim);
 
-  scene.add(new THREE.HemisphereLight('#3a5488', '#241426', 1.7));
-  scene.add(new THREE.AmbientLight('#2a3d5e', 0.9));
+  const hemi = new THREE.HemisphereLight('#3a5488', '#241426', 1.7);
+  const amb = new THREE.AmbientLight('#2a3d5e', 0.9);
+  scene.add(hemi, amb);
+
+  // blackout missions: each agent carries a torch — the only friendly light
+  const torches = [];
+  for (let i = 0; i < 2; i++) {
+    const t = new THREE.SpotLight('#fff3d0', 0, 520, 0.5, 0.45, 1.2);
+    t.visible = false;
+    scene.add(t, t.target);
+    torches.push(t);
+  }
 
   const neonLights = [];
   for (let i = 0; i < MAX_NEON_LIGHTS; i++) {
@@ -159,13 +248,44 @@ function init(canvas) {
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+
+  // Pass order matters: SSAO/bloom/film operate on the linear HDR frame, then
+  // OutputPass tone-maps to display sRGB, and the grade + vignette shaders run
+  // last because their curves are written for display-referred colour (running
+  // them pre-OutputPass crushes linear mid-tones to black). EffectComposer
+  // renders the last enabled pass to screen automatically.
+
+  // SSAO — screen-space ambient occlusion for depth cues
+  const ssao = new SSAOPass(scene, camera, canvas.width, canvas.height);
+  ssao.kernelRadius = 16;
+  ssao.minDistance = 0.005;
+  ssao.maxDistance = 0.12;
+  composer.addPass(ssao);
+
+  // Bloom — neon glow
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(canvas.width / 2, canvas.height / 2), 0.7, 0.6, 0.78);
   composer.addPass(bloom);
+
+  // Film grain (noir feel) — r155+ FilmPass signature is (intensity, grayscale)
+  const film = new FilmPass(0.35, false);
+  composer.addPass(film);
+
+  // Tone map + linear→sRGB
   composer.addPass(new OutputPass());
 
+  // Color grading (noir look), display-referred
+  const colorGrade = new ShaderPass(ColorGradeShader);
+  composer.addPass(colorGrade);
+
+  // Vignette + chromatic aberration (final)
+  const vignetteCA = new ShaderPass(VignetteCAShader);
+  composer.addPass(vignetteCA);
+
   R = {
-    renderer, scene, camera, composer, bloom, key, neonLights, flashLight, blastLight,
+    renderer, scene, camera, composer, bloom, ssao, film, colorGrade, vignetteCA,
+    key, rim, hemi, amb, torches,
+    neonLights, flashLight, blastLight,
     missionKey: null, statics: new THREE.Group(), signs: [],
     bodies: new Map(), vehicles: new Map(), props: new Map(), blasts: new Map(),
     bullets: null,
@@ -175,6 +295,7 @@ function init(canvas) {
   };
   R.mat = makeMaterials();
   scene.add(R.statics);
+  if (typeof window !== 'undefined') window.__vgR = R; // debug/tuning access, like __vg
   return R;
 }
 
@@ -426,7 +547,7 @@ function styleFor(e, settings) {
     tread: '#4a3520', stacks: '#4a4224', crane: '#28394a', shiver: '#1f4048',
     lockjaw: '#2f3644', chemist: '#9aa38c',
     cs_trooper: '#4a3c22', cs_tactical: '#52401f', cs_shield: '#5a4826', graft: '#5e4a24',
-    wrecker: '#46321e',
+    wrecker: '#46321e', fusebox: '#1f4a42', staticchoir: '#3a3050',
   }[e.type] ?? '#324a2e';
   const big = ['bruiser', 'bouncer', 'chromedog', 'stacks', 'lockjaw', 'tread', 'cs_shield', 'wrecker'].includes(e.type);
   return { accent: hc ? '#ff5050' : e.color, outfit: hc ? '#5a2323' : base,
@@ -660,6 +781,26 @@ function buildProp(pr) {
     m.position.y = 13; m.castShadow = true; m.receiveShadow = true;
     return m;
   }
+  if (pr.kind === 'spikes' || pr.spikes) {
+    const g = new THREE.Group();
+    const stripCount = Math.max(3, Math.floor(pr.r / 6));
+    const stripMat = new THREE.MeshStandardMaterial({ color: '#2a2f3a', roughness: 0.3, metalness: 0.85 });
+    const glintMat = new THREE.MeshBasicMaterial({ color: '#8aaacc', transparent: true, opacity: 0.0, depthWrite: false, blending: THREE.AdditiveBlending });
+    const glints = [];
+    for (let i = 0; i < stripCount; i++) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(pr.r * 1.8, 1.5, 3.5), stripMat);
+      strip.position.set((i - (stripCount - 1) / 2) * 10, 0.8, 0);
+      strip.castShadow = true; strip.receiveShadow = true;
+      g.add(strip);
+      const glint = new THREE.Mesh(new THREE.BoxGeometry(pr.r * 1.6, 0.5, 2.5), glintMat.clone());
+      glint.position.set((i - (stripCount - 1) / 2) * 10, 1.8, 0);
+      glint.userData = { isGlint: true };
+      g.add(glint);
+      glints.push(glint);
+    }
+    g.userData = { glints };
+    return g;
+  }
   const h = pr.kind === 'shelf' ? 56 : 38;
   const m = new THREE.Mesh(new THREE.BoxGeometry(pr.r * 2, h, pr.r * 2),
     pr.kind === 'shelf' ? R.mat.shelf : R.mat.crate);
@@ -820,13 +961,31 @@ export function draw3d(canvas, w, settings) {
     return hit ? { x: hit.x, y: hit.z } : { x: w.cam.x, y: w.cam.y };
   };
 
+  // blackout: kill the sky, hand each agent a torch. Adjusted per-frame so
+  // switching missions restores the normal night without a renderer rebuild.
+  const dark = !!w.mission.blackout;
+  R.key.intensity = dark ? 0.22 : 2.6;
+  R.rim.intensity = dark ? 0.1 : 1.1;
+  R.hemi.intensity = dark ? 0.28 : 1.7;
+  R.amb.intensity = dark ? 0.14 : 0.9;
+  R.torches.forEach((t, i) => {
+    const p = w.players[i];
+    const on = dark && p && !p.downed;
+    t.visible = on;
+    if (!on) { t.intensity = 0; return; }
+    t.intensity = 90000 * fx; // physical units over pixel distances
+    t.position.set(p.x, 42, p.y);
+    t.target.position.set(p.x + Math.cos(p.aimAngle) * 240, 6, p.y + Math.sin(p.aimAngle) * 240);
+    t.target.updateMatrixWorld();
+  });
+
   syncBodies(w, settings);
   syncPickups(w, now);
   syncProps(w, now, settings);
   syncVehicles(w, settings, now);
   syncBullets(w);
   syncEffects(w, fx, settings);
-  syncNeon(w, fx);
+  syncNeon(w, dark ? fx * 0.15 : fx);
   syncZones(w, now);
   syncCompass(w, now);
 
@@ -839,7 +998,40 @@ export function draw3d(canvas, w, settings) {
       : allDown ? 0.5 : Math.min(0.8, (hurt / 0.12) * 0.7);
   }
 
-  R.bloom.strength = (settings.reducedFlash ? 0.35 : 0.7) * fx;
+  // Apply settings to post-process passes
+  const reduced = settings.reducedFlash;
+  const fxInt = settings.fxIntensity ?? 1;
+
+  // SSAO
+  if (R.ssao) {
+    R.ssao.enabled = !reduced;
+    R.ssao.kernelRadius = 16 * fxInt;
+    R.ssao.minDistance = 0.005;
+    R.ssao.maxDistance = 0.12;
+  }
+
+  // Bloom
+  R.bloom.strength = (reduced ? 0.35 : 0.7) * fxInt;
+  R.bloom.radius = 0.6 * fxInt;
+  R.bloom.threshold = reduced ? 0.8 : 0.78;
+
+  // Film grain — r155+ FilmPass exposes uniforms, not nIntensity/sIntensity
+  if (R.film) {
+    R.film.uniforms.intensity.value = reduced ? 0.15 : 0.35;
+  }
+
+  // Color grade
+  if (R.colorGrade) {
+    R.colorGrade.enabled = true;
+    R.colorGrade.uniforms.intensity.value = reduced ? 0.5 : 1.0;
+  }
+
+  // Vignette + Chromatic Aberration
+  if (R.vignetteCA) {
+    R.vignetteCA.uniforms.vignetteStrength.value = reduced ? 0.2 : 0.35;
+    R.vignetteCA.uniforms.caStrength.value = reduced ? 0.0004 : 0.0012;
+  }
+
   R.composer.render();
 }
 
@@ -942,6 +1134,14 @@ function syncProps(w, now, settings) {
       glow.material.color.set(blink ? '#ffffff' : '#ff5f5f');
       glow.material.emissive.set(blink ? '#ffffff' : '#ff5f5f');
       glow.material.emissiveIntensity = 7;
+    }
+    if ((pr.kind === 'spikes' || pr.spikes) && m.userData.glints) {
+      const glints = m.userData.glints;
+      const phase = (now / 800 + pr.id * 17) % 1;
+      const intensity = Math.sin(phase * Math.PI * 2) * 0.5 + 0.5;
+      glints.forEach((g, i) => {
+        g.material.opacity = settings.reducedFlash ? 0 : intensity * 0.18 * (0.7 + 0.3 * Math.sin(now / 200 + i));
+      });
     }
   }
   for (const [id, m] of R.props) {

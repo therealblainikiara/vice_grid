@@ -17,6 +17,7 @@ export function newCampaign(agent = 'rhino') {
     totals: { arrests: 0, kills: 0, evidence: 0, evidenceTotal: 0, civiliansKilled: 0, intel: 0 },
     upgrades: { weapons: 0, armor: 0, mobility: 0, enforcement: 0, intelligence: 0 },
     upgradePoints: 0,
+    p2UpgradePoints: 0,
     flags: {},             // narrative flags, e.g. { chromeDogArrested: true }
   };
 }

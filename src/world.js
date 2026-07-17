@@ -13,11 +13,26 @@ import {
   createObjectives, applyEvent, primaryComplete, primaryFailed,
 } from './objectives.js';
 import { AGENTS, ENEMY_TYPES } from './missions.js';
-import { VEHICLE_TYPES, makeVehicle, stepVehicle, ramDamage, damageVehicle } from './vehicles.js';
+import { VEHICLE_TYPES, makeVehicle, stepVehicle, ramDamage, damageVehicle, blowTires } from './vehicles.js';
 
 export const TILE = 48;
 export const ZOOM = 1.45; // camera zoom: world px -> screen px
 const R = 14; // body radius
+
+function checkSpikeStrips(v, w) {
+  if (v.tireBlown) return;
+  for (const p of w.props) {
+    if (p.spikes && dist(v.x, v.y, p.x, p.y) < v.r + p.r) {
+      blowTires(v);
+      w.effects.push({ kind: 'spark', x: p.x, y: p.y, t: 0, dur: 0.25 });
+      w.effects.push({ kind: 'debris', x: p.x, y: p.y, t: 0, dur: 0.4 });
+      w.fx.tireBlowout?.(p.x, p.y);
+      w.fx.tireBurst?.(p.x, p.y);
+      p.spikeTriggered = true;
+      break;
+    }
+  }
+}
 
 let nextId = 1;
 const id = () => nextId++;
@@ -66,6 +81,7 @@ export function createWorld(mission, opts) {
         case 'm': w.pickups.push({ id: id(), kind: 'medkit', x, y }); break;
         case '=': w.props.push({ id: id(), kind: 'barrier', x, y, hp: Infinity, solid: true, r: 20 }); break;
         case 'v': w.props.push({ id: id(), kind: 'vat', x, y, hp: 45, solid: true, r: 19, explosive: true, fuse: null, exploded: false }); break;
+        case '^': w.props.push({ id: id(), kind: 'spikes', x, y, r: 16, solid: false, spikes: true }); break;
         case 'X': w.zones.push({ x, y, r: 80, tag: 'gate', done: false }); break;
       }
     });
@@ -163,6 +179,11 @@ function solidAt(w, x, y) {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
   if (tx < 0 || ty < 0 || tx >= w.cols || ty >= w.rows) return true;
   return w.walls.has(tx + ',' + ty);
+}
+
+function tileAt(w, x, y) {
+  const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+  return w.mission.map[ty]?.[tx] ?? '.';
 }
 
 function moveCircle(w, e, dx, dy) {
@@ -379,12 +400,35 @@ export function updateWorld(w, dt, controlsBySlot) {
     w.cam.x += (cx - w.cam.x) * sm;
     w.cam.y += (cy - w.cam.y) * sm;
   }
-  // clamp the view inside the map (centre if the map is smaller than the view)
+  // Clamp camera so ALL players stay on screen with a safety margin.
+  // 3D renderer uses pitch ~58° (1.02 rad), distance 620.
+  // Bottom of screen reaches ~1.6x further in world Y than top.
+  // We inflate vertical half-view so players never vanish at bottom edge.
   {
-    const hw = (w.viewW ?? 1280) / 2 / ZOOM, hh = (w.viewH ?? 720) / 2 / ZOOM;
-    const mw = w.cols * TILE, mh = w.rows * TILE;
-    w.cam.x = mw <= hw * 2 ? mw / 2 : clamp(w.cam.x, hw, mw - hw);
-    w.cam.y = mh <= hh * 2 ? mh / 2 : clamp(w.cam.y, hh, mh - hh);
+    const hw = (w.viewW ?? 1280) / 2 / ZOOM;
+    const hh = (w.viewH ?? 720) / 2 / ZOOM;
+    const mw = w.cols * TILE;
+    const mh = w.rows * TILE;
+
+    // 3D camera pitch fudge: bottom of frustum extends further in +Y
+    const VERT_FUDGE = 1.6;
+    const effHh = hh * VERT_FUDGE;
+
+    const alive = w.players.filter((p) => !p.downed);
+    const anchor = alive.length ? alive : w.players;
+    let maxOffsetX = 0, maxOffsetY = 0;
+    if (anchor.length) {
+      maxOffsetX = Math.max(...anchor.map((p) => Math.abs(p.x - w.cam.x)));
+      maxOffsetY = Math.max(...anchor.map((p) => Math.abs(p.y - w.cam.y)));
+    }
+    const SAFE_FRAC = 0.8; // keep players within inner 80% of half-view
+    const minHw = Math.min(hw, maxOffsetX > 0 ? maxOffsetX / SAFE_FRAC : hw);
+    const minHh = Math.min(effHh, maxOffsetY > 0 ? maxOffsetY / SAFE_FRAC : effHh);
+
+    if (mw <= hw * 2) w.cam.x = mw / 2;
+    else w.cam.x = clamp(w.cam.x, minHw, mw - minHw);
+    if (mh <= effHh * 2) w.cam.y = mh / 2;
+    else w.cam.y = clamp(w.cam.y, minHh, mh - minHh);
   }
   w.cam.shake = Math.max(0, w.cam.shake - dt * 3);
 
@@ -427,8 +471,10 @@ function updatePlayer(w, p, dt, c) {
     if (!v) { p.vehicleId = null; }
     else {
       if (v.driverSlot === p.slot) {
-        const d = stepVehicle(v, { throttle: -c.moveY, steer: c.moveX, handbrake: c.dodge }, dt);
-        moveVehicle(w, v, d.dx, d.dy);
+        const d = stepVehicle(v, { throttle: -c.moveY, steer: c.moveX, handbrake: c.dodge }, dt, w);
+moveVehicle(w, v, d.dx, d.dy);
+    checkSpikeStrips(v, w);
+        checkSpikeStrips(v, w);
       }
       p.x = v.x; p.y = v.y;
       aimPlayer(w, p, c);
@@ -671,8 +717,11 @@ function updateEnemy(w, e, dt) {
   const los = d < 700 && hasLos(w, e.x, e.y, player.x, player.y);
 
   if (e.state === 'IDLE') {
-    // aggro on sight, or on nearby gunfire — never a map-wide instant alert
-    if ((los && d < 420) || (w.threat > 0 && d < 560)) {
+    // aggro on sight, or on nearby gunfire — never a map-wide instant alert.
+    // In a blackout nobody sees far: the dark is the player's arrest tool.
+    const sightR = w.mission.blackout ? 240 : 420;
+    const noiseR = w.mission.blackout ? 350 : 560;
+    if ((los && d < sightR) || (w.threat > 0 && d < noiseR)) {
       e.state = 'FIGHT'; e.stateTime = 0;
       e.shotTimer = Math.max(e.shotTimer, 0.6 + w.rng() * 0.6);
     } else { wander(w, e, dt, 40); return; }
@@ -903,8 +952,10 @@ function updateVehicles(w, dt) {
         c = { throttle: ahead ? -0.8 : (Math.abs(v.speed) < v.cruise ? 0.5 : 0), steer: steerToLane * (facingEast ? 1 : -1), handbrake: false };
       }
     }
-    const d = stepVehicle(v, c, dt);
-    moveVehicle(w, v, d.dx, d.dy);
+    const d = stepVehicle(v, c, dt, w);
+moveVehicle(w, v, d.dx, d.dy);
+    checkSpikeStrips(v, w);
+    checkSpikeStrips(v, w);
     // traffic despawn at the map ends
     if (v.ai === 'traffic' && (v.x < 40 || v.x > w.cols * TILE - 40)) v.gone = true;
   }

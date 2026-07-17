@@ -6,18 +6,19 @@ import { makeUI } from './ui.js';
 import { createWorld, updateWorld, addPlayer, restoreCheckpoint } from './world.js';
 import { draw } from './render.js';
 import { draw3d, resize3d } from './render3d.js';
-import { gradeMission } from './grading.js';
+import { gradeMission, selectEnding } from './grading.js';
 import { MISSIONS, CAMPAIGN, AGENTS } from './missions.js';
 import { makeSaveStore, newCampaign, loadSettings, saveSettings } from './save.js';
 import { buyUpgrade, refundUpgrade, respec } from './upgrades.js';
 
 const canvas = document.getElementById('game');
-// Probe WebGL2 before anyone claims a context: a canvas can only ever hold one
-// context type, and probing with getContext is safe (three reuses the same
-// object). No WebGL means we fall back to the 2D renderer rather than a black
-// screen — the sim and every other system are identical either way.
+// Probe WebGL2 support without creating a persistent context.
+// three.js will create its own WebGLRenderer with the exact attributes it needs.
 const use3d = (() => {
-  try { return !!canvas.getContext('webgl2'); } catch { return false; }
+  try {
+    // Just test availability; don't keep the context.
+    return typeof WebGL2RenderingContext !== 'undefined' && !!canvas.getContext('webgl2', { failIfMajorPerformanceCaveat: false });
+  } catch { return false; }
 })();
 const ctx = use3d ? null : canvas.getContext('2d');
 // Sandboxed hosts can throw on localStorage ACCESS, not just on writes — probe
@@ -64,11 +65,41 @@ const fx = {
   alarm: () => audio.alarm(),
   reloadSfx: () => audio.reload(),
   dodge: () => audio.dodgeWoosh(),
+  tireBlowout: (x, y) => audio.tireBlowout(x, y),
+  tireBurst: (x, y) => {
+    const el = document.createElement('div');
+    el.className = 'tire-burst';
+    const canvas = document.getElementById('game');
+    const rect = canvas.getBoundingClientRect();
+    const zoom = 1.45; // ZOOM from world.js
+    const cx = rect.left + (canvas.width / 2) + (x - (canvas.width / 2 / zoom)) * zoom;
+    const cy = rect.top + (canvas.height / 2) + (y - (canvas.height / 2 / zoom)) * zoom;
+    el.style.left = cx + 'px';
+    el.style.top = cy + 'px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 400);
+  },
   banner: (t) => ui.banner(t),
   subtitle: (s, t) => ui.subtitle(s, t),
   log: (t) => ui.log(t),
   playerHurt: (slot) => { if (slot === 1) input.vibrate(0.8, 120); },
 };
+
+function createTireBurstDom(x, y) {
+  const canvas = document.getElementById('game');
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const hud = document.getElementById('hud');
+  const el = document.createElement('div');
+  el.className = 'tire-burst';
+  el.style.left = (x * scaleX) + 'px';
+  el.style.top = (y * scaleY) + 'px';
+  hud.appendChild(el);
+  setTimeout(() => el.remove(), 400);
+}
+
+fx.tireBurstDom = createTireBurstDom;
 
 function applyRetroFilter() {
   document.body.classList.toggle('retro', !!settings.retroFilter);
@@ -115,30 +146,58 @@ function currentMissionId() {
 
 function startMission(missionId) {
   const mission = MISSIONS[missionId];
-  state = 'briefing';
+  // Show story recap first, then briefing
+  state = 'recap';
   ui.clearLog();
-  ui.showBriefing(mission, AGENTS[campaign.agent].name + (coopArmed ? ' + ' + AGENTS[partnerOf(campaign.agent)].name : ''));
-  document.getElementById('btn-deploy').onclick = () => {
+  ui.showRecap(campaign, mission, AGENTS[campaign.agent].name + (coopArmed ? ' + ' + AGENTS[partnerOf(campaign.agent)].name : ''));
+  document.getElementById('btn-recap-continue').onclick = () => {
     audio.unlock(); audio.uiConfirm();
-    world = createWorld(mission, {
-      agentKey: campaign.agent, coop: coopArmed,
-      settings: { ...settings, upgrades: campaign.upgrades },
-      fx,
-    });
-    state = 'play';
-    ui.show(null);
-    audio.setMusic('calm');
+    state = 'briefing';
+    ui.showBriefing(mission, AGENTS[campaign.agent].name + (coopArmed ? ' + ' + AGENTS[partnerOf(campaign.agent)].name : ''));
+    document.getElementById('btn-deploy').onclick = () => {
+      audio.unlock(); audio.uiConfirm();
+      world = createWorld(mission, {
+        agentKey: campaign.agent, coop: coopArmed,
+        settings: { ...settings, upgrades: campaign.upgrades },
+        fx,
+      });
+      state = 'play';
+      ui.show(null);
+      audio.setMusic('calm');
+    };
   };
 }
 
 function partnerOf(key) { return key === 'rhino' ? 'viper' : 'rhino'; }
+
+// New Game+ — carry over upgrades, unlocks, stats
+function startNgPlus(agentKey) {
+  const oldCampaign = campaign;
+  const carriedUpgrades = { ...oldCampaign.upgrades };
+  const carriedPoints = oldCampaign.upgradePoints;
+  const carriedTotals = { ...oldCampaign.totals };
+  const carriedFlags = { ...oldCampaign.flags };
+  const carriedGrades = { ...oldCampaign.grades };
+
+  campaign = newCampaign(agentKey);
+  campaign.newGamePlus = true;
+  campaign.ngPlusCycle = (oldCampaign.ngPlusCycle || 0) + 1;
+  campaign.upgrades = carriedUpgrades;
+  campaign.upgradePoints = carriedPoints + 5; // bonus points
+  campaign.totals = carriedTotals;
+  campaign.flags = carriedFlags;
+  campaign.grades = carriedGrades;
+  // Difficulty scales with NG+ cycles
+  if (campaign.ngPlusCycle >= 1) settings.difficulty = 'kingpin';
+  store.save(0, campaign);
+  startMission(currentMissionId());
+}
 
 function finishMission(win) {
   const mission = world.mission;
   const stats = world.stats;
   const grade = gradeMission(stats);
   if (win && replayMode) {
-    // replay: keep the best grade, totals still count, no campaign advance
     const prev = campaign.grades[mission.id];
     if (!prev || GRADE_RANK[grade.grade] > GRADE_RANK[prev]) campaign.grades[mission.id] = grade.grade;
     campaign.totals.arrests += stats.arrests;
@@ -155,14 +214,34 @@ function finishMission(win) {
     campaign.totals.evidenceTotal += stats.evidenceTotal;
     campaign.totals.civiliansKilled += stats.civiliansKilled;
     campaign.totals.intel += stats.intel ?? 0;
-    campaign.upgradePoints += { S: 3, A: 2, B: 2, C: 1, D: 1 }[grade.grade];
+    const basePoints = { S: 3, A: 2, B: 2, C: 1, D: 1 }[grade.grade];
+    // Co-op: split upgrade points between players (rounded up for P1)
+    if (coopArmed && world.players.length === 2) {
+      campaign.upgradePoints += Math.ceil(basePoints / 2);
+      // P2 points stored for their agent
+      campaign.p2UpgradePoints = (campaign.p2UpgradePoints || 0) + Math.floor(basePoints / 2);
+    } else {
+      campaign.upgradePoints += basePoints;
+    }
     campaign.missionIndex += 1;
     if (mission.id === 'm01' && stats.bossArrested) campaign.flags.chromeDogArrested = true;
+    if (mission.id === 'm16' && stats.bossArrested) campaign.flags.finalBossArrested = true;
     store.save(0, campaign);
   }
   state = 'results';
   audio.setMusic('menu');
-  ui.showResults(mission, stats, grade, win, win ? mission.debriefWin : mission.debriefLose);
+  // Check if this was the final mission (m16) and we won
+  if (win && !replayMode && mission.id === 'm16') {
+    const ending = selectEnding(campaign);
+    ui.showEnding(campaign, ending);
+    // Wire ending buttons via events
+    // wrap the handlers: a listener receives the Event, and startNgPlus takes
+    // an agent key — passing it bare would start NG+ as agent "[object Event]"
+    window.addEventListener('vg-ngplus', () => startNgPlus(campaign.agent), { once: true });
+    window.addEventListener('vg-endmenu', () => toMenu(), { once: true });
+  } else {
+    ui.showResults(mission, stats, grade, win, win ? mission.debriefWin : mission.debriefLose);
+  }
 }
 
 // --- wire static buttons ---
@@ -277,8 +356,13 @@ const STEP = 1 / 60;
 let acc = 0, last = performance.now();
 
 function render(w) {
-  if (use3d) draw3d(canvas, w, settings);
-  else draw(ctx, w, settings);
+  try {
+    if (use3d) draw3d(canvas, w, settings);
+    else draw(ctx, w, settings);
+  } catch (e) {
+    // report once, not 60/sec — a persistent draw error would drown the console
+    if (!render.reported) { render.reported = true; console.error('[render] error', e); }
+  }
 }
 
 function frame(now) {

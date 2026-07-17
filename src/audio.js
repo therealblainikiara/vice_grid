@@ -128,6 +128,14 @@ export function makeAudio(settings) {
     uiConfirm() { if (!ctx) return; const t = ctx.currentTime; osc('sine', 660, t, 0.06, 0.2, sfxGain); osc('sine', 880, t + 0.06, 0.08, 0.2, sfxGain); },
     reload() { if (!ctx) return; const t = ctx.currentTime; osc('square', 900, t, 0.03, 0.2, sfxGain); osc('square', 700, t + 0.12, 0.03, 0.2, sfxGain); },
     dodgeWoosh() { if (!ctx) return; noise(ctx.currentTime, 0.12, 0.2, sfxGain, 400); },
+    tireBlowout(x, y) {
+      if (!ctx) return;
+      const s = spatial(x, y); if (!s.ok) return;
+      const t = ctx.currentTime;
+      noise(t, 0.15, 0.5, s.dest, 800); // hiss
+      osc('square', 120, t, 0.08, 0.6, s.dest, 40); // pop
+      osc('sine', 80, t + 0.02, 0.12, 0.3, s.dest, 20); // low thump
+    },
     explosion(x, y) { if (!ctx) return; const s = spatial(x, y); if (s.ok) { noise(ctx.currentTime, 0.6, 1.0, s.dest, 100); osc('sine', 90, ctx.currentTime, 0.5, 0.8, s.dest, 30); } },
   };
 }

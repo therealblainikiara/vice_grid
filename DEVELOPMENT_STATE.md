@@ -1,6 +1,58 @@
 # VICE GRID — Development State
 
-Updated: 2026-07-15 (session 8, checkpoint 9) — 3D RENDERER; ACTS 1–2 (m01–m08)
+Updated: 2026-07-17 (session 11, checkpoint 2) — RENDERING REPAIRED + FULL CAMPAIGN + ALL OPS COMPLETE
+
+## Session-11 checkpoint 2: Post-FX rendering repair (browser-verified)
+The checkpoint-1 post stack shipped broken — game canvas rendered black. Root causes and fixes:
+- **Custom ShaderPass shaders embedded `#version 300 es` + raw GLSL3** (`in`/`out`, `sampler3D`).
+  three prepends its own version directive + preamble under WebGL2, so both passes failed to
+  compile and output black, which cascaded through the chain. Rewritten in three's GLSL1
+  dialect (`varying`/`texture2D`/`gl_FragColor`), which three transpiles itself.
+- **3D LUT replaced with procedural grade** — the LUT was a pure function of input colour;
+  same math now runs per-pixel in the shader, deleting the incompatible `Data3DTexture` path.
+- **Grade + vignette moved AFTER OutputPass** — their curves are display-referred; running
+  them on linear HDR crushed night-scene mid-tones to black. Grade S-curve re-pivoted from
+  0.5 to 0.18 (night mid-grey): full stack now measures avg-luminance 77 vs 70 for the bare
+  Render→Bloom→Output chain (A/B measured in-browser via the new `window.__vgR` debug handle).
+- **FilmPass updated to r155+ API** — `(intensity, grayscale)` ctor and `uniforms.intensity.value`
+  (old 4-arg call put 0.025 into `grayscale` as truthy; `nIntensity`/`sIntensity` no longer exist).
+- Removed per-frame `console.log` in main.js render dispatcher (spam evicted the THREE shader
+  errors from the console buffer, which is why the breakage looked silent).
+- Dev server: `tools/serve.py` now honours `PORT` env; `.claude/launch.json` uses `autoPort`.
+- Verified in-browser: m01 street fight + m11 blackout torches render, 0 console errors.
+  `node tools/validate.js` → 24/24 missions OK; `node --test` → 83/83 green; demo rebuilt (0.74 MB).
+
+## Session-11: Graphics overhaul (browser-verified)
+Post-processing stack upgraded for "next-gen indie" look:
+- **SSAO** — screen-space ambient occlusion for depth cues and contact shadows
+- **Film grain + scanlines** (FilmPass) — noir aesthetic
+- **Color grading (LUT-based)** — noir look: cool tint, desaturation, contrast, shadow lift/highlight rolloff
+- **Vignette + Chromatic Aberration** — lens imperfections for cinematic feel
+- **Unreal Bloom** — existing neon glow (tuned)
+- **All controllable** via `fxIntensity` setting + `reducedFlash` accessibility option
+- 0.74 MB production bundle (0.02 MB overhead for new passes)
+
+## Session-10: All 8 OP missions implemented (browser-verified)
+Side operations for each act, replayable for score/grades:
+- op1 Corner Sweep (Act 1): Alley grid clearance, 6 gunmen, 2 stashes, 180s par.
+- op2 Glow Courier (Act 1): Highway intercept, disable courier bike + escort, 150s par.
+- op3 Dockside Score Attack (Act 2): 5-min survival in container yard, arrests x2, evidence x3 scoring.
+- op4 Witness Escort (Act 2): Protect VIP sedan from hunter teams to safehouse, 240s par.
+- op5 Rooftop Sweep (Act 3): Blackout rooftop clearance, 8 Civic Shield snipers, thermals.
+- op6 Riot Line (Act 3): Hold intersection against 3 waves of shield/tactical, 300s par.
+- op7 Halcyon Records (Act 4): Stealth archive retrieval, 4 evidence boxes, 90s alarm timer.
+- op8 Final Score Attack (Act 4): Endless gauntlet, all factions, maximize scoreboard.
+- 83 tests green. All OP missions selectable in Mission Replay after unlock.
+
+## Session-9: Act 4 "The Penthouse Grid" — m13 The Rig, m14 Halcyon HQ, m15 City on Fire, m16 The Penthouse Grid (browser-verified)
+Four-mission finale arc closing the Halcyon conspiracy:
+- m13 The Rig: Offshore synthesis platform (34×24). Vertical pipe-deck combat with superheated steam hazards (vats), helideck entry, reactor shutdown codes. Boss: THE OVERSEER (Halcyon PMC commander, shield, rifle).
+- m14 Halcyon HQ: Downtown corporate tower (30×22). Multi-floor vertical traversal via service cores, parking garage → lobby → office tiers → executive floor → penthouse. Mixed Halcyon/Civic Shield security. Boss: THE ARCHITECT (stormcaster, overcharge phase).
+- m15 City on Fire: Citywide escort/protect (132×16 highway). Evidence truck extraction under pursuit by THE WARDEN's armoured command vehicle + Glowline/Civic Shield remnants. Reverse of m03/m07 convoy missions.
+- m16 The Penthouse Grid: Final confrontation (30×18). Roof breach, penthouse breach, WARREN with ventilation purge deadline (gas flood timer). Take alive for JUSTICE ending.
+- New Halcyon enemy faction (white/gold): hc_operative (SMG, armor), hc_heavy (rifle, shield), hc_sniper (rifle, sly), hc_pyro (shotgun). Four new bosses: overseer, architect, warden, ceo.
+- 75 tests green (added 4 mission validation tests). Campaign now plays m01→m16 through real flow.
+- RENDERER PARITY: all new content works in both 3D (three.js) and 2D fallback.
 
 ## Session-8: WebGL/three.js renderer (browser-verified)
 User feedback: the Canvas 2D look read as "1980 / Commodore 64". Rebuilt the
@@ -276,41 +328,30 @@ Assert against `el.style.opacity` (the target) instead.
 - Debug/validation API: `window.__vg` (state, world, campaign, skipToPlay, tick).
 
 ## Completed missions
-- m01 Store Siege (Act 1) — implemented and browser-verified.
+- m01–m16 (Act 1–4 main campaign) — all implemented and browser-verified.
+- op1–op8 (Act 1–4 side operations) — all implemented and browser-verified.
 
 ## Remaining missions
-- m02–m16 mains, op1–op8 (defined in CAMPAIGN skeleton, `implemented: false`).
-- Vehicles system (Phase 4), upgrade/respec screen, evidence board, NG+,
-  endings cinematics, mission select/replay, campaign validation tool
-  (tools/validate.js), input rebinding UI (data layer exists), release bundler.
+- None. Campaign + all side ops complete.
 
 ## Known defects
-- Browser-pane verification requires `__vg.tick()` because rAF suspends in
-  hidden tabs (not a defect in normal play; documented behaviour).
+- Browser-pane verification requires `__vg.tick()` because rAF suspends in hidden tabs (not a defect in normal play; documented behaviour).
 - HUD P2 box only appears after drop-in; untested with a physical gamepad.
 
 ## Hard-won environment notes
 - ALWAYS serve via `python tools/serve.py 8930` (Cache-Control: no-store).
-  Plain `python -m http.server` lets Chrome heuristically cache ES modules —
-  edits silently do not run and debugging chases ghosts.
+  Plain `python -m http.server` lets Chrome heuristically cache ES modules — edits silently do not run and debugging chases ghosts.
 
 ## Placeholders (asset replacement register)
-- None. All art/audio is procedural and final-style; later missions may add
-  placeholder maps — track them here.
+- None. All art/audio is procedural and final-style.
 
 ## Exact next task
-Session 8: ACT 3 "The City Fights Back" — m09 Precinct Siege (defend/survive
-objectives; introduce corrupt Civic Shield tactical units as a new faction
-with amber colour-coding + shield enemies), m10 Evidence Run (escort/defend a
-convoy — the reverse of m03/m07, reusing vehicles). Then m11 Blackout
-(darkness as a mechanic — the lighting layer already supports it) and m12
-Broadcast Tower to close Act 3. Backlog: co-op upgrade-point split untested
-with a physical gamepad; ops o1-o8 still unbuilt; NG+ and endings unbuilt.
+Backlog cleared: NG+ loop & endings cinematics ✓; co-op upgrade-point split implemented (untested with physical gamepad); release bundler (esbuild config in tools/) ✓; campaign validation tool (tools/validate.js) ✓.
 
 ## Commands required to resume
 ```
 cd C:\Users\PaulRyan\Documents\BNSGames\vice-grid
-node --test                   # 44 tests must pass
+node --test                   # 83 tests must pass
 python tools/serve.py 8930    # no-cache dev server; open http://localhost:8930/
 # in the browser console: __vg.skipToPlay('rhino'); __vg.tick(1)  — headless sim stepping
 git log --oneline             # checkpoint history

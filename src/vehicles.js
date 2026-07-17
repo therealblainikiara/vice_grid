@@ -1,6 +1,13 @@
 // vehicles.js — arcade top-down vehicle physics. Pure; no DOM.
 // World integration (collision, occupants, damage events) lives in world.js.
 
+export const SURFACE_MOD = {
+  '~': 1.0,
+  ',': 0.9,
+  '.': 0.7,
+  '^': 0.3,
+};
+
 export const VEHICLE_TYPES = {
   patrol:  { name: 'Patrol Interceptor', hp: 260, accel: 340, brake: 520, maxSpeed: 430, reverseMax: 120, turnRate: 2.4, grip: 0.985, handbrakeTurn: 1.9, r: 22, color: '#2b4a66', tail: '#ff4040' },
   gangcar: { name: 'Glowline Runner',    hp: 150, accel: 300, brake: 460, maxSpeed: 390, reverseMax: 100, turnRate: 2.2, grip: 0.985, handbrakeTurn: 1.8, r: 21, color: '#2f4d2c', tail: '#ff8a3d' },
@@ -24,30 +31,49 @@ export function makeVehicle(typeKey, x, y, opts = {}) {
     disabled: false, smokeT: 0, hitFlash: 0,
     driverSlot: null,              // player slot when player-driven
     occupantSpawned: false,
+    _maxSpeed: t.maxSpeed,
+    tireBlown: false,
   };
 }
 
 // Step driving physics from controls {throttle -1..1, steer -1..1, handbrake}.
+// world is optional; if provided, samples surface at vehicle center to modulate friction.
 // Mutates v; returns {dx, dy} displacement for the caller to collision-check.
-export function stepVehicle(v, c, dt) {
+export function stepVehicle(v, c, dt, world = null) {
   const t = VEHICLE_TYPES[v.type];
+  const maxSpeed = v._maxSpeed ?? t.maxSpeed;
+  const accel = t.accel;
+  const brake = t.brake;
+  const reverseMax = t.reverseMax;
+  const turnRate = t.turnRate;
+  const handbrakeTurn = t.handbrakeTurn;
+  const grip = t.grip;
+
+  let surfaceMod = 1.0;
+  if (world) {
+    const tx = Math.floor(v.x / world.TILE);
+    const ty = Math.floor(v.y / world.TILE);
+    const map = world.mission?.map;
+    if (map?.[ty]?.[tx]) {
+      const tile = map[ty][tx];
+      surfaceMod = SURFACE_MOD[tile] ?? 1.0;
+    }
+  }
+
   if (v.disabled) {
-    v.speed *= Math.pow(0.02, dt); // roll to a stop
+    v.speed *= Math.pow(0.02, dt);
   } else {
-    if (c.throttle > 0) v.speed += t.accel * c.throttle * dt;
+    if (c.throttle > 0) v.speed += accel * c.throttle * dt * surfaceMod;
     else if (c.throttle < 0) {
-      // braking when moving forward, reversing when stopped
-      if (v.speed > 10) v.speed += t.brake * c.throttle * dt;
-      else v.speed += t.accel * 0.6 * c.throttle * dt;
+      if (v.speed > 10) v.speed += brake * c.throttle * dt * surfaceMod;
+      else v.speed += accel * 0.6 * c.throttle * dt * surfaceMod;
     }
     v.speed *= Math.pow(c.handbrake ? 0.95 : 0.995, dt * 60);
-    v.speed = Math.max(-t.reverseMax, Math.min(t.maxSpeed, v.speed));
-    // steering authority scales with speed (no pivoting in place);
-    // the handbrake keeps the rear loose so drifts still rotate
-    let authority = Math.min(1, Math.abs(v.speed) / (t.maxSpeed * 0.35));
+    v.speed = Math.max(-reverseMax, Math.min(maxSpeed, v.speed));
+    let authority = Math.min(1, Math.abs(v.speed) / (maxSpeed * 0.35));
     if (c.handbrake) authority = Math.max(authority, 0.5);
-    const rate = c.handbrake ? t.handbrakeTurn + t.turnRate : t.turnRate;
-    v.angle += c.steer * rate * authority * dt * Math.sign(v.speed || 1);
+    const rate = c.handbrake ? handbrakeTurn + turnRate : turnRate;
+    v.angle += c.steer * rate * authority * dt * Math.sign(v.speed || 1) * surfaceMod;
   }
   return { dx: Math.cos(v.angle) * v.speed * dt, dy: Math.sin(v.angle) * v.speed * dt };
 }
@@ -66,4 +92,11 @@ export function damageVehicle(v, dmg) {
   v.hitFlash = 0.12;
   if (v.hp <= 0) { v.hp = 0; v.disabled = true; return 'disabled'; }
   return 'hit';
+}
+
+export function blowTires(v) {
+  if (!v.tireBlown) {
+    v.tireBlown = true;
+    v._maxSpeed = Math.max(30, v._maxSpeed * 0.3);
+  }
 }

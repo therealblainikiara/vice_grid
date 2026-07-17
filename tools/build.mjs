@@ -34,7 +34,7 @@ html = html.replace(
 html = html.replace(
   '<div class="tagline">Cobalt City · 2030 · Two badges left</div>',
   `<div class="tagline">Cobalt City · 2030 · Two badges left</div>
-    <div class="hint" style="color:var(--gold)">FEEDBACK DEMO · ${stamp} · missions 1–10 playable · progress saves in your browser</div>`,
+    <div class="hint" style="color:var(--gold)">FEEDBACK DEMO · ${stamp} · missions 1–16 + 8 OPs playable · progress saves in your browser</div>`,
 );
 
 mkdirSync(path.join(root, 'dist'), { recursive: true });
