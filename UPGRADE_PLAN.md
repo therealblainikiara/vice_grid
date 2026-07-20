@@ -13,18 +13,18 @@ scalar ones (max HP +15/lvl, speed +6%/lvl, damage +8%/lvl, stability, cuff
 speed +15%/lvl). Every named unlock below is currently description-only.
 Implement in world.js (pure sim) + input/render support, one test per effect.
 
-- [ ] Weapons L2: +12% fire rate, reduced recoil (scale weapon cooldown/spread)
+- [x] Weapons L2: +12% fire rate, reduced recoil (scale weapon cooldown/spread)
 - [ ] Weapons L3: alt-fire mode (hold aim + fire; per-weapon secondary)
 - [ ] Weapons L4: special ammo — incendiary / shock rounds (status effects)
-- [ ] Armour L2: +10% damage reduction
-- [ ] Armour L3: knockback resistance
-- [ ] Armour L4: out-of-combat regen (1 HP/s after ~4s without damage)
-- [ ] Mobility L2: dodge cooldown −20%, dodge distance +15%
+- [x] Armour L2: +10% damage reduction
+- [x] Armour L3: knockback resistance
+- [x] Armour L4: out-of-combat regen (1 HP/s after ~4s without damage)
+- [x] Mobility L2: dodge cooldown −20%, dodge distance +15%
 - [ ] Mobility L3: combat slide (crouch + dodge chord)
 - [ ] Mobility L4: sprint burst (2× speed 3s, 20s cooldown, HUD pip)
-- [ ] Enforcement L1: +10% intimidate radius (cuff speed half is done)
+- [x] Enforcement L1: +10% intimidate radius (cuff speed half is done)
 - [ ] Enforcement L2: intimidate morale flash on nearby suspects
-- [ ] Enforcement L3: auto-cuff downed suspects in range
+- [x] Enforcement L3: auto-cuff downed suspects in range
 - [ ] Enforcement L4: cuff flashbang stun
 - [ ] Intelligence L1: gate the evidence compass behind this (today it keys
       off the intel stat, not the upgrade)

@@ -14,6 +14,7 @@ import {
 } from './objectives.js';
 import { AGENTS, ENEMY_TYPES } from './missions.js';
 import { VEHICLE_TYPES, makeVehicle, stepVehicle, ramDamage, damageVehicle, blowTires } from './vehicles.js';
+import { upgradeEffects } from './upgrades.js';
 
 export const TILE = 48;
 export const ZOOM = 1.45; // camera zoom: world px -> screen px
@@ -463,7 +464,14 @@ function updatePlayer(w, p, dt, c) {
   if (p.downed || !c) { p.cuffingId = null; return; }
 
   const upgrades = w.settings?.upgrades ?? {};
-  const speed = p.agent.speed * (1 + (upgrades.mobility ?? 0) * 0.06);
+  const ue = upgradeEffects(upgrades);
+  const speed = p.agent.speed * ue.speedMul;
+
+  // Armour L4: slow regen once out of combat
+  p.sinceHurt = (p.sinceHurt ?? 0) + dt;
+  if (ue.regenPerSec > 0 && p.sinceHurt > ue.regenDelay && p.hp < p.maxHp) {
+    p.hp = Math.min(p.maxHp, p.hp + ue.regenPerSec * dt);
+  }
 
   // Driving: movement controls go to the vehicle; aiming and shooting stay live
   if (p.vehicleId != null) {
@@ -472,8 +480,7 @@ function updatePlayer(w, p, dt, c) {
     else {
       if (v.driverSlot === p.slot) {
         const d = stepVehicle(v, { throttle: -c.moveY, steer: c.moveX, handbrake: c.dodge }, dt, w);
-moveVehicle(w, v, d.dx, d.dy);
-    checkSpikeStrips(v, w);
+        moveVehicle(w, v, d.dx, d.dy);
         checkSpikeStrips(v, w);
       }
       p.x = v.x; p.y = v.y;
@@ -495,7 +502,7 @@ moveVehicle(w, v, d.dx, d.dy);
   // Dodge
   if (p.dodgeTimer > 0) {
     p.dodgeTimer -= dt;
-    moveCircle(w, p, p.dodgeDx * p.agent.dodgeSpeed * dt, p.dodgeDy * p.agent.dodgeSpeed * dt);
+    moveCircle(w, p, p.dodgeDx * p.agent.dodgeSpeed * (p.dodgeBoost ?? 1) * dt, p.dodgeDy * p.agent.dodgeSpeed * (p.dodgeBoost ?? 1) * dt);
   } else {
     let mx = c.moveX, my = c.moveY;
     const ml = Math.hypot(mx, my);
@@ -505,7 +512,8 @@ moveVehicle(w, v, d.dx, d.dy);
     moveCircle(w, p, mx * speed * slow * dt, my * speed * slow * dt);
 
     if (c.dodge && p.dodgeCd <= 0 && p.moving && justPressed(p, c, 'dodge')) {
-      p.dodgeTimer = p.agent.dodgeTime; p.dodgeCd = 0.9;
+      p.dodgeTimer = p.agent.dodgeTime; p.dodgeCd = ue.dodgeCd; // Mobility L2 shortens
+      p.dodgeBoost = ue.dodgeDistMul;
       p.iframes = p.agent.dodgeTime + 0.08;
       p.dodgeDx = mx / (ml || 1); p.dodgeDy = my / (ml || 1);
       w.fx.dodge?.();
@@ -514,6 +522,16 @@ moveVehicle(w, v, d.dx, d.dy);
           if (e.hp > 0 && dist(p.x, p.y, e.x, e.y) < 70) e.stunTimer = Math.max(e.stunTimer, 0.8);
         }
       }
+    }
+  }
+
+  // Enforcement L3: downed suspects get cuffed by standing over them — no hold
+  if (ue.autoCuff && !p.downed) {
+    for (const e of w.enemies) {
+      if (e.state !== 'DOWNED') continue;
+      if (dist(p.x, p.y, e.x, e.y) > 64) continue;
+      e.cuffProgress = tickCuff(e.cuffProgress ?? 0, dt * 0.6, { cuffSpeed: p.agent.cuffSpeed });
+      if (e.cuffProgress >= 1 && e.state !== 'CUFFED') completeCuff(w, e);
     }
   }
 
@@ -540,7 +558,7 @@ moveVehicle(w, v, d.dx, d.dy);
     for (const e of w.enemies) {
       if (e.hp <= 0 || e.state !== 'FIGHT') continue;
       const d = dist(p.x, p.y, e.x, e.y);
-      if (d < 380 && hasLos(w, p.x, p.y, e.x, e.y)) e.moraleTimer = Math.min(e.moraleTimer, 0.05);
+      if (d < 380 * ue.intimidateRadiusMul && hasLos(w, p.x, p.y, e.x, e.y)) e.moraleTimer = Math.min(e.moraleTimer, 0.05);
     }
   }
 
@@ -582,11 +600,13 @@ function firePlayer(w, p, c, { fromVehicle }) {
 
   if (c.fire && !def.melee && canFire(ws)) {
     fire(ws);
+    const ue = upgradeEffects(upgrades);
+    ws.cooldown /= ue.fireRateMul; // Weapons L2: +12% fire rate
     w.stats.shotsFired += def.pellets ?? 1;
     const muzzleR = fromVehicle ? fromVehicle.r + 14 : R + 6;
     const spread = effectiveSpread(def, {
       moving: p.moving || (!!fromVehicle && Math.abs(fromVehicle.speed) > 60),
-      stability: p.agent.stability + (upgrades.weapons ?? 0) * 0.03,
+      stability: p.agent.stability + ue.stabilityBonus,
     });
     for (let i = 0; i < (def.pellets ?? 1); i++) {
       const a = p.aimAngle + (w.rng() - 0.5) * 2 * spread;
@@ -631,6 +651,17 @@ function meleeSwing(w, p, def) {
   }
 }
 
+// Shared by held-interact cuffing and the Enforcement L3 auto-cuff.
+function completeCuff(w, target) {
+  target.state = 'CUFFED'; target.stateTime = 0;
+  w.fx.cuff?.(target.x, target.y);
+  w.fx.log?.(`${enemyLabel(target)} arrested`);
+  neutralize(w, target, 'arrested');
+  const found = searchSuspect(target, w.rng());
+  if (found.found === 'intel') { w.stats.intel = (w.stats.intel ?? 0) + 1; w.fx.log?.('Intel recovered: evidence marked on the grid'); }
+  saveCheckpoint(w);
+}
+
 function handleInteract(w, p, dt, c) {
   if (!c.interact) { p.cuffingId = null; p.reviveProgress = 0; return; }
 
@@ -645,7 +676,7 @@ function handleInteract(w, p, dt, c) {
     }
   }
   const upgrades = w.settings?.upgrades ?? {};
-  const cuffSpeed = p.agent.cuffSpeed * (1 + (upgrades.enforcement ?? 0) * 0.15);
+  const cuffSpeed = p.agent.cuffSpeed * upgradeEffects(upgrades).cuffSpeedMul;
 
   // 1) cuff nearest cuffable enemy
   let target = null, td = 64;
@@ -657,15 +688,7 @@ function handleInteract(w, p, dt, c) {
   if (target) {
     if (p.cuffingId !== target.id) { p.cuffingId = target.id; target.cuffProgress = target.cuffProgress ?? 0; }
     target.cuffProgress = tickCuff(target.cuffProgress, dt, { cuffSpeed });
-    if (target.cuffProgress >= 1 && target.state !== 'CUFFED') {
-      target.state = 'CUFFED'; target.stateTime = 0;
-      w.fx.cuff?.(target.x, target.y);
-      w.fx.log?.(`${enemyLabel(target)} arrested`);
-      neutralize(w, target, 'arrested');
-      const found = searchSuspect(target, w.rng());
-      if (found.found === 'intel') { w.stats.intel = (w.stats.intel ?? 0) + 1; w.fx.log?.('Intel recovered: evidence marked on the grid'); }
-      saveCheckpoint(w);
-    }
+    if (target.cuffProgress >= 1 && target.state !== 'CUFFED') completeCuff(w, target);
     return;
   }
 
@@ -1137,6 +1160,13 @@ function updateBullets(w, dt) {
 
 function hitEntity(w, t, dmg, { lethal, stun = 0, kx = 0, ky = 0, fromPlayer }) {
   if (dmg <= 0) return;
+  if (t.kind === 'player') {
+    // Armour L2 damage reduction / L3 knockback resistance; regen clock resets
+    const ue = upgradeEffects(w.settings?.upgrades);
+    dmg *= ue.damageTakenMul;
+    kx *= ue.knockbackMul; ky *= ue.knockbackMul;
+    t.sinceHurt = 0;
+  }
   // Riot shields absorb frontal hits; flank or get behind them. The knockback
   // vector points away from the shooter, so the shooter sits at -k.
   if (t.shield && (kx || ky) && t.state !== 'DOWNED' && !isCuffable(t.state)) {

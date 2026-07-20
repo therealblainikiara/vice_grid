@@ -1,5 +1,32 @@
 // upgrades.js — five-category upgrade system with free respec. Pure; no DOM.
 
+// Derived effect table consumed by the sim. Keep every number here in lockstep
+// with the matching UPGRADE_DEFS level description — a sold upgrade must do
+// exactly what its shop text promises, and the tests pin these values.
+export function upgradeEffects(upgrades = {}) {
+  const u = (k) => upgrades?.[k] ?? 0;
+  return {
+    // weapons
+    damageMul: 1 + u('weapons') * 0.08,
+    stabilityBonus: u('weapons') * 0.03 + (u('weapons') >= 2 ? 0.05 : 0),
+    fireRateMul: u('weapons') >= 2 ? 1.12 : 1,
+    // armour
+    maxHpBonus: u('armor') * 15,
+    damageTakenMul: u('armor') >= 2 ? 0.9 : 1,
+    knockbackMul: u('armor') >= 3 ? 0.45 : 1,
+    regenPerSec: u('armor') >= 4 ? 1 : 0,
+    regenDelay: 4,
+    // mobility
+    speedMul: 1 + u('mobility') * 0.06,
+    dodgeCd: u('mobility') >= 2 ? 0.72 : 0.9,
+    dodgeDistMul: u('mobility') >= 2 ? 1.15 : 1,
+    // enforcement
+    cuffSpeedMul: 1 + u('enforcement') * 0.15,
+    intimidateRadiusMul: u('enforcement') >= 1 ? 1.1 : 1,
+    autoCuff: u('enforcement') >= 3,
+  };
+}
+
 export const UPGRADE_DEFS = {
   weapons: {
     name: 'Weapons',
