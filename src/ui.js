@@ -6,6 +6,7 @@ import { summary } from './objectives.js';
 import { UPGRADE_DEFS } from './upgrades.js';
 import { ACTION_ORDER, ACTION_LABELS, codeLabel } from './input.js';
 import { CAMPAIGN, MISSIONS } from './missions.js';
+import { ACTS, arrestedBosses, campaignMetrics } from './story.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -121,6 +122,8 @@ export function makeUI(settings, audio) {
     const completed = idx > 0 ? mains.slice(0, idx) : [];
     const isNg = campaign.newGamePlus;
     const cycle = campaign.ngPlusCycle || 0;
+    const entry = CAMPAIGN.find((m) => m.id === mission.id);
+    const act = ACTS[entry?.act];
 
     let html = '';
     if (completed.length === 0) {
@@ -131,7 +134,7 @@ export function makeUI(settings, audio) {
       const grade = campaign.grades[last.id] || '—';
       html = `<p><b>DISPATCH:</b> Last time: <b>${lastMission.title}</b>. Grade <b>${grade}</b>. ${lastMission.debriefWin.lines[0]}</p>`;
       if (completed.length > 1) {
-        html += `<p>Since the beginning: <b>${completed.length} districts</b> secured. `;
+        html += `<p>Since the beginning: <b>${completed.length} operations</b> completed. `;
         const totalArrests = campaign.totals.arrests;
         const totalKills = campaign.totals.kills;
         const totalEv = campaign.totals.evidence;
@@ -142,23 +145,12 @@ export function makeUI(settings, audio) {
       }
     }
 
-    // Narrative flags
-    const flags = [];
-    if (campaign.flags.chromeDogArrested) flags.push('CHROME DOG in custody (M01)');
-    if (campaign.flags.finalBossArrested) flags.push('WARREN arrested (M16)');
-    if (campaign.flags.midnightArrested) flags.push('MIDNIGHT arrested (M02)');
-    if (campaign.flags.stacksArrested) flags.push('BIG STACKS arrested (M04)');
-    if (campaign.flags.craneArrested) flags.push('CRANE arrested (M05)');
-    if (campaign.flags.shiverArrested) flags.push('SHIVER arrested (M06)');
-    if (campaign.flags.lockjawArrested) flags.push('LOCKJAW arrested (M07)');
-    if (campaign.flags.chemistArrested) flags.push('THE CHEMIST arrested (M08)');
-    if (campaign.flags.graftArrested) flags.push('GRAFT arrested (M09)');
-    if (campaign.flags.wreckerArrested) flags.push('THE WRECKER arrested (M10)');
-    if (campaign.flags.fuseboxArrested) flags.push('FUSEBOX arrested (M11)');
-    if (campaign.flags.staticchoirArrested) flags.push('STATIC CHOIR arrested (M12)');
-    if (campaign.flags.overseerArrested) flags.push('THE OVERSEER arrested (M13)');
-    if (campaign.flags.architectArrested) flags.push('THE ARCHITECT arrested (M14)');
-    if (campaign.flags.wardenArrested) flags.push('THE WARDEN arrested (M15)');
+    if (act && (completed.length === 0 || completed.at(-1)?.act !== entry.act)) {
+      html += `<p class="hint" style="color:var(--gold); margin-top:8px;"><b>ACT ${entry.act} — ${act.title}</b><br>${act.premise}</p>`;
+    }
+
+    const flags = arrestedBosses(campaign, MISSIONS, CAMPAIGN)
+      .map(({ missionId, name }) => `${name} in custody (${missionId.toUpperCase()})`);
 
     const flagsHtml = flags.length
       ? `<div><b>High-Value Targets in Custody:</b> ${flags.join(' · ')}</div>`
@@ -202,15 +194,14 @@ export function makeUI(settings, audio) {
       NEW_MANAGEMENT: 'NEW MANAGEMENT',
     };
     const bodies = {
-      FULL_DISCLOSURE: `The master key turned every lock. Halcyon's servers dumped their guts onto every screen in Cobalt — shell companies, bribe ledgers, test-subject rosters, the lot. The Mayor resigned at noon. The Civic Shield contract was voided by sunset. WARREN is in a federal supermax, singing for a deal. GLOW is dead. The pipeline is severed. You did it, Grid. Every name on a warrant. Every body accounted for.`,
+      FULL_DISCLOSURE: `The master key turned every lock. Halcyon's servers dumped their guts onto every screen in Cobalt — shell companies, bribe ledgers, test-subject rosters, the lot. The Mayor resigned at noon. The Civic Shield contract was voided by sunset. WARREN's command files exposed the whole machine. GLOW is dead. The pipeline is severed. You did it, Grid. Every name on a warrant. Every body accounted for.`,
       JUSTICE: `The evidence held. The arrests stuck. WARREN took a plea — life without parole, in exchange for the names above him. Half the city council is under indictment. Civic Shield is being restructured under federal oversight. GLOW production is halted. It's not the clean sweep you wanted, but it's justice. The city can breathe tonight.`,
-      COMPROMISED_VICTORY: `The case closed, but the files are thinner than they should be. WARREN walked on a technicality — jurisdictional conflict, sealed records, a judge who golfed with the right people. Civic Shield keeps their contract with "reforms." GLOW seizures drop 60%, but the cookers adapt. You saved lives, Grid. Just not all of them.`,
-      NEW_MANAGEMENT: `The bodies piled up and the evidence burned. WARREN's lawyers buried the rest. A new crew moves into the penthouse — different logos, same product. The Mayor calls it "stability." Civic Shield gets a budget increase. You're reassigned to traffic. The city doesn't know it lost tonight. But you do.`,
+      COMPROMISED_VICTORY: `The case closed, but the files are thinner than they should be. Halcyon's remaining directors exploit jurisdictional conflicts, sealed records, and judges who golf with the right people. Civic Shield keeps its contract with "reforms." GLOW seizures drop 60%, but the cookers adapt. You saved lives, Grid. Just not all of them.`,
+      NEW_MANAGEMENT: `The bodies piled up and the evidence burned. Halcyon's lawyers buried what remained. A new crew moves into the penthouse — different logos, same product. The Mayor calls it "stability." Civic Shield gets a budget increase. You're reassigned to traffic. The city doesn't know it lost tonight. But you do.`,
     };
-    const stats = campaign.totals;
-    const evidencePct = campaign.evidenceTotal > 0 ? Math.round((campaign.evidenceFound / campaign.evidenceTotal) * 100) : 0;
-    const suspects = stats.arrests + stats.kills;
-    const arrestRatio = suspects > 0 ? Math.round((stats.arrests / suspects) * 100) : 100;
+    const stats = campaignMetrics(campaign);
+    const evidencePct = Math.round(stats.evidencePct * 100);
+    const arrestRatio = Math.round(stats.arrestRatio * 100);
     $('ending-title').textContent = titles[ending];
     $('ending-body').textContent = bodies[ending];
     $('ending-stats').innerHTML = `Arrests: ${stats.arrests} · Kills: ${stats.kills} · Civilians Lost: ${stats.civiliansKilled} · Evidence: ${evidencePct}% · Arrest Ratio: ${arrestRatio}%`;

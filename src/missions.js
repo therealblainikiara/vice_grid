@@ -47,30 +47,30 @@ export const ENEMY_TYPES = {
 // Full campaign skeleton. `implemented` gates mission select during development;
 // the release build requires every entry to be true (validated by tools/validate.js).
 export const CAMPAIGN = [
-  { id: 'm01', act: 1, n: 1, title: 'Store Siege', type: 'main', implemented: true },
-  { id: 'm02', act: 1, n: 2, title: 'Club Neon Raid', type: 'main', implemented: true },
-  { id: 'm03', act: 1, n: 3, title: 'Highway Glow Run', type: 'main', implemented: true },
-  { id: 'm04', act: 1, n: 4, title: 'Warehouse Intercept', type: 'main', implemented: true },
-  { id: 'op1', act: 1, n: 0, title: 'OP: Corner Sweep', type: 'op', implemented: true },
-  { id: 'op2', act: 1, n: 0, title: 'OP: Glow Courier', type: 'op', implemented: true },
-  { id: 'm05', act: 2, n: 5, title: 'Port of Cobalt', type: 'main', implemented: true },
-  { id: 'm06', act: 2, n: 6, title: 'Tower Block Evac', type: 'main', implemented: true },
-  { id: 'm07', act: 2, n: 7, title: 'Convoy Takedown', type: 'main', implemented: true },
-  { id: 'm08', act: 2, n: 8, title: 'The Glow Kitchen', type: 'main', implemented: true },
-  { id: 'op3', act: 2, n: 0, title: 'OP: Dockside Score Attack', type: 'op', implemented: true },
-  { id: 'op4', act: 2, n: 0, title: 'OP: Witness Escort', type: 'op', implemented: true },
-  { id: 'm09', act: 3, n: 9, title: 'Precinct Siege', type: 'main', implemented: true },
-  { id: 'm10', act: 3, n: 10, title: 'Evidence Run', type: 'main', implemented: true },
-  { id: 'm11', act: 3, n: 11, title: 'Blackout', type: 'main', implemented: true },
-  { id: 'm12', act: 3, n: 12, title: 'Signal Tower', type: 'main', implemented: true },
-  { id: 'op5', act: 3, n: 0, title: 'OP: Rooftop Sweep', type: 'op', implemented: true },
-  { id: 'op6', act: 3, n: 0, title: 'OP: Riot Line', type: 'op', implemented: true },
-  { id: 'm13', act: 4, n: 13, title: 'The Rig', type: 'main', implemented: true },
-  { id: 'm14', act: 4, n: 14, title: 'Halcyon HQ', type: 'main', implemented: true },
-  { id: 'm15', act: 4, n: 15, title: 'City on Fire', type: 'main', implemented: true },
-  { id: 'm16', act: 4, n: 16, title: 'The Penthouse Grid', type: 'main', implemented: true },
-  { id: 'op7', act: 4, n: 0, title: 'OP: Halcyon Records', type: 'op', implemented: true },
-  { id: 'op8', act: 4, n: 0, title: 'OP: Final Score Attack', type: 'op', implemented: true },
+  { id: 'm01', act: 1, n: 1, title: 'Store Siege', type: 'main', environment: 'street', implemented: true },
+  { id: 'm02', act: 1, n: 2, title: 'Club Neon Raid', type: 'main', environment: 'club', implemented: true },
+  { id: 'm03', act: 1, n: 3, title: 'Highway Glow Run', type: 'main', environment: 'street', implemented: true },
+  { id: 'm04', act: 1, n: 4, title: 'Warehouse Intercept', type: 'main', environment: 'warehouse', implemented: true },
+  { id: 'op1', act: 1, n: 0, title: 'OP: Corner Sweep', type: 'op', environment: 'street', implemented: true },
+  { id: 'op2', act: 1, n: 0, title: 'OP: Glow Courier', type: 'op', environment: 'street', implemented: true },
+  { id: 'm05', act: 2, n: 5, title: 'Port of Cobalt', type: 'main', environment: 'port', implemented: true },
+  { id: 'm06', act: 2, n: 6, title: 'Tower Block Evac', type: 'main', environment: 'street', implemented: true },
+  { id: 'm07', act: 2, n: 7, title: 'Convoy Takedown', type: 'main', environment: 'street', implemented: true },
+  { id: 'm08', act: 2, n: 8, title: 'The Glow Kitchen', type: 'main', environment: 'lab', implemented: true },
+  { id: 'op3', act: 2, n: 0, title: 'OP: Dockside Score Attack', type: 'op', environment: 'port', implemented: true },
+  { id: 'op4', act: 2, n: 0, title: 'OP: Witness Escort', type: 'op', environment: 'street', implemented: true },
+  { id: 'm09', act: 3, n: 9, title: 'Precinct Siege', type: 'main', environment: 'precinct', implemented: true },
+  { id: 'm10', act: 3, n: 10, title: 'Evidence Run', type: 'main', environment: 'street', implemented: true },
+  { id: 'm11', act: 3, n: 11, title: 'Blackout', type: 'main', environment: 'industrial', implemented: true },
+  { id: 'm12', act: 3, n: 12, title: 'Signal Tower', type: 'main', environment: 'industrial', implemented: true },
+  { id: 'op5', act: 3, n: 0, title: 'OP: Rooftop Sweep', type: 'op', environment: 'street', implemented: true },
+  { id: 'op6', act: 3, n: 0, title: 'OP: Riot Line', type: 'op', environment: 'street', implemented: true },
+  { id: 'm13', act: 4, n: 13, title: 'The Rig', type: 'main', environment: 'industrial', implemented: true },
+  { id: 'm14', act: 4, n: 14, title: 'Halcyon HQ', type: 'main', environment: 'office', implemented: true },
+  { id: 'm15', act: 4, n: 15, title: 'City on Fire', type: 'main', environment: 'street', implemented: true },
+  { id: 'm16', act: 4, n: 16, title: 'The Penthouse Grid', type: 'main', environment: 'penthouse', implemented: true },
+  { id: 'op7', act: 4, n: 0, title: 'OP: Halcyon Records', type: 'op', environment: 'office', implemented: true },
+  { id: 'op8', act: 4, n: 0, title: 'OP: Final Score Attack', type: 'op', environment: 'street', implemented: true },
 ];
 
 export const MISSIONS = {
@@ -1168,7 +1168,7 @@ MISSIONS.m13 = {
   debriefWin: {
     speaker: 'DISPATCH',
     lines: [
-      'The Rig is listing. WRACK is in custody. The submarine pen had a manifest — every Halcyon shell company, every dirty account.',
+      'The Rig is listing. WRACK is neutralized. The submarine pen had a manifest — every Halcyon shell company, every dirty account.',
       'The money leads to Halcyon HQ downtown. The penthouse. This ends tonight.',
     ],
   },
@@ -1229,7 +1229,7 @@ MISSIONS.m14 = {
   debriefWin: {
     speaker: 'DISPATCH',
     lines: [
-      'Halcyon HQ is ours. The board is in cuffs. The Architect\'s testimony will bury every politician on his payroll.',
+      'Halcyon HQ is ours. The board operation is broken. The Architect\'s records will bury every politician on the payroll.',
       'One last loose end: the penthouse server grid. It\'s still broadcasting. Shut it down and the city breathes again.',
     ],
   },
@@ -1294,7 +1294,7 @@ MISSIONS.m15 = {
   briefing: {
     speaker: 'DISPATCH',
     lines: [
-      'The Architect\'s arrest triggered a dead-man switch. Halcyon is burning the city\'s data centers — and the evidence inside them.',
+      'The raid on the Architect triggered a dead-man switch. Halcyon is burning the city\'s data centers — and the evidence inside them.',
       'A convoy of armoured trucks is racing for the highway, loaded with server racks. If they reach the interchange, the data scatters to a thousand shell companies.',
       'You have the interceptor. The city is burning — riots, fires, Civic Shield deserting posts. Drive through it.',
       'At the river crossing you have a choice: the BRIDGE (fast, exposed, heavy resistance) or the TUNNEL (slow, tight, spike strips). Choose your line.',
@@ -1326,9 +1326,9 @@ MISSIONS.m15 = {
     ],
   },
   boss: {
-    type: 'wrecker', x: 100, y: 10, trigger: 'wrecker', name: 'THE WRECKER',
-    intro: 'THE WRECKER: "Nine hundred wrecks and never a scratch on me. You get to be nine-oh-one."',
-    phase2At: 0.5, phase2Banner: 'THE WRECKER TEARS OFF HIS DOOR AS A SHIELD',
+    type: 'wrecker', x: 100, y: 10, trigger: 'wrecker', name: 'THE WARDEN',
+    intro: 'THE WARDEN: "This evidence leaves the city over my wreckage. I can arrange that."',
+    phase2At: 0.5, phase2Banner: 'THE WARDEN TURNS THE CONVOY INTO A RAM',
     phase2Spawns: [],
     surrenderAt: 0.2,
   },
@@ -1362,7 +1362,7 @@ MISSIONS.m16 = {
     lines: [
       'The server racks from the convoy point here: the Penthouse Grid. A fortress atop the Halcyon tower, air-gapped, hardened, and broadcasting the city\'s secrets to the highest bidder.',
       'The Architect gave up the access codes under pressure. We have a window — minutes before the encryption rotates.',
-      'Civic Shield\'s inner circle is here. GRAFT survived the precinct. He\'s making his last stand with the city\'s elite as human shields.',
+      'Halcyon director Warren is inside with Civic Shield\'s remaining inner circle. He\'s using the city\'s elite as human shields.',
       'End this. Shut down the Grid. Arrest everyone. The city watches.',
     ],
   },
@@ -1370,7 +1370,7 @@ MISSIONS.m16 = {
     speaker: 'DISPATCH',
     lines: [
       'The Grid is dark. The broadcast is cut. The Architect\'s empire is in evidence bags.',
-      'GRAFT is in custody. The Civic Shield charter is revoked. Halcyon Wellness is seized.',
+      'WARREN is neutralized. The Civic Shield charter is revoked. Halcyon Wellness is seized.',
       'Vice Grid, you didn\'t just win a case. You broke the machine.',
       'The city exhales. Good work, officers. Good work.',
     ],
@@ -1378,23 +1378,23 @@ MISSIONS.m16 = {
   debriefLose: { speaker: 'DISPATCH', lines: ['The Grid holds. The machine keeps grinding. We regroup at dawn.'] },
   objectives: [
     { id: 'clear', label: 'Neutralize the inner circle', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
-    { id: 'boss', label: 'Take down GRAFT', primary: true, type: 'boss' },
+    { id: 'boss', label: 'Take down WARREN', primary: true, type: 'boss' },
     { id: 'grid', label: 'Shut down the Penthouse Grid', primary: true, type: 'reach', tag: 'grid' },
     { id: 'cuffs', label: 'Optional: Arrest 5 executives', primary: false, type: 'arrest', count: 5 },
     { id: 'ledger', label: 'Optional: Seize the final ledger + encryption keys', primary: false, type: 'evidence', count: 2 },
   ],
   escalation: {
     at: 5,
-    banner: 'GRAFT\'S PERSONAL DETAIL DEPLOYS',
+    banner: 'WARREN\'S PERSONAL DETAIL DEPLOYS',
     spawns: [
       { type: 'cs_shield', x: 2, y: 2 }, { type: 'cs_tactical', x: 3, y: 2 },
       { type: 'cs_shield', x: 30, y: 2 }, { type: 'cs_tactical', x: 31, y: 2 },
     ],
   },
   boss: {
-    type: 'graft', x: 16, y: 2, name: 'GRAFT',
-    intro: 'GRAFT: "Twenty-two years I kept this city quiet. You two are just the latest noise."',
-    phase2At: 0.5, phase2Banner: 'GRAFT UNLOCKS THE VAULT — HEAVY ARMOR DEPLOYS',
+    type: 'graft', x: 16, y: 2, name: 'WARREN',
+    intro: 'WARREN: "This city runs on contracts, officers. You are an accounting error."',
+    phase2At: 0.5, phase2Banner: 'WARREN UNLOCKS THE VAULT — HEAVY ARMOR DEPLOYS',
     phase2Spawns: [{ type: 'cs_shield', x: 10, y: 5 }, { type: 'cs_shield', x: 22, y: 5 }],
     surrenderAt: 0.1,
   },
@@ -1507,3 +1507,9 @@ MISSIONS.op8 = {
     set(2, 18, 'P'); set(31, 18, 'm');
   }),
 };
+
+// Campaign metadata is the source of truth for where a mission takes place.
+// Copy it onto the runtime definition once, keeping renderers data-driven.
+for (const entry of CAMPAIGN) {
+  if (MISSIONS[entry.id]) MISSIONS[entry.id].environment = entry.environment;
+}

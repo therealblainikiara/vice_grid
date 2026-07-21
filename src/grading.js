@@ -43,15 +43,7 @@ export function gradeMission(stats) {
   return { pct: Math.round(pct), grade, parts };
 }
 
-// Campaign-level ending selection. Inputs are cumulative campaign totals.
-export function selectEnding(c) {
-  const evidencePct = c.evidenceTotal > 0 ? c.evidenceFound / c.evidenceTotal : 0;
-  const suspects = c.arrests + c.kills;
-  const arrestRatio = suspects > 0 ? c.arrests / suspects : 1;
-  if (evidencePct >= 1) return 'FULL_DISCLOSURE';
-  if (arrestRatio >= 0.6 && evidencePct >= 0.8 && c.finalBossArrested) return 'JUSTICE';
-  if (arrestRatio < 0.3 || c.civiliansKilled > 8) return 'NEW_MANAGEMENT';
-  return 'COMPROMISED_VICTORY';
-}
+// Compatibility re-export: ending logic belongs to campaign story state.
+export { selectEnding } from './story.js';
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));

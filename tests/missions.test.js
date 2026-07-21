@@ -5,9 +5,17 @@ import { CAMPAIGN, MISSIONS, ENEMY_TYPES } from '../src/missions.js';
 import { VEHICLE_TYPES } from '../src/vehicles.js';
 
 const implemented = CAMPAIGN.filter((m) => m.implemented);
+const environments = new Set(['street', 'club', 'warehouse', 'port', 'lab', 'precinct', 'industrial', 'office', 'penthouse']);
 
 test('at least one mission is implemented', () => {
   assert.ok(implemented.length >= 1);
+});
+
+test('main-mission boss identities are unique across the story', () => {
+  const names = implemented
+    .filter((entry) => entry.type === 'main' && MISSIONS[entry.id].boss)
+    .map((entry) => MISSIONS[entry.id].boss.name);
+  assert.equal(new Set(names).size, names.length, 'a resolved boss reappears under the same identity');
 });
 
 for (const entry of implemented) {
@@ -19,6 +27,7 @@ for (const entry of implemented) {
     assert.ok(m.debriefLose?.lines?.length >= 1);
     assert.ok(m.parSec > 0);
     assert.ok(m.objectives.some((o) => o.primary));
+    assert.ok(environments.has(m.environment), `unknown environment ${m.environment}`);
 
     // map: rectangular with sealed borders
     const rows = m.map;

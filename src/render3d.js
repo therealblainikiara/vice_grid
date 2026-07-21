@@ -48,16 +48,9 @@ const ENVIRONMENTS = {
   office:     { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#8892a2', signs: false, floor: 'carpet' },
   penthouse:  { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#a89e8e', signs: false, floor: 'marble' },
 };
-// Renderer-side default per mission; a mission def can override with its own
-// `environment` field. Anything unlisted is a city street.
-const MISSION_ENV = {
-  m02: 'club', m04: 'warehouse', m05: 'port', m08: 'lab', m09: 'precinct',
-  m11: 'industrial', m12: 'industrial', m13: 'industrial', m14: 'office',
-  m16: 'penthouse', op3: 'port', op7: 'office',
-};
 const CONTAINER_COLORS = ['#b4432e', '#2e6ab4', '#3c8a4a', '#c9822f', '#8a3c6e', '#4a8a92'];
 function envFor(mission) {
-  return ENVIRONMENTS[mission.environment ?? MISSION_ENV[mission.id]] ?? ENVIRONMENTS.street;
+  return ENVIRONMENTS[mission.environment] ?? ENVIRONMENTS.street;
 }
 const SIGN_SETS = {
   street: [['HALCYON', '#31d3ff'], ['GLOW⁰', '#9dff57'], ['NOODLE-24', '#ff8a3d'],

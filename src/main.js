@@ -6,7 +6,8 @@ import { makeUI } from './ui.js';
 import { createWorld, updateWorld, addPlayer, restoreCheckpoint } from './world.js';
 import { draw } from './render.js';
 import { draw3d, resize3d } from './render3d.js';
-import { gradeMission, selectEnding } from './grading.js';
+import { gradeMission } from './grading.js';
+import { recordMissionOutcome, selectEnding } from './story.js';
 import { MISSIONS, CAMPAIGN, AGENTS } from './missions.js';
 import { makeSaveStore, newCampaign, loadSettings, saveSettings } from './save.js';
 import { buyUpgrade, refundUpgrade, respec } from './upgrades.js';
@@ -200,11 +201,8 @@ function finishMission(win) {
   if (win && replayMode) {
     const prev = campaign.grades[mission.id];
     if (!prev || GRADE_RANK[grade.grade] > GRADE_RANK[prev]) campaign.grades[mission.id] = grade.grade;
-    campaign.totals.arrests += stats.arrests;
-    campaign.totals.kills += stats.kills;
-    campaign.totals.evidence += stats.evidenceFound;
-    campaign.totals.civiliansKilled += stats.civiliansKilled;
-    campaign.totals.intel += stats.intel ?? 0;
+    // Replays improve the mission grade, but are not part of the canonical
+    // campaign timeline and must not change story choices or endings.
     store.save(0, campaign);
   } else if (win) {
     campaign.grades[mission.id] = grade.grade;
@@ -224,8 +222,7 @@ function finishMission(win) {
       campaign.upgradePoints += basePoints;
     }
     campaign.missionIndex += 1;
-    if (mission.id === 'm01' && stats.bossArrested) campaign.flags.chromeDogArrested = true;
-    if (mission.id === 'm16' && stats.bossArrested) campaign.flags.finalBossArrested = true;
+    recordMissionOutcome(campaign, mission, stats);
     store.save(0, campaign);
   }
   state = 'results';
