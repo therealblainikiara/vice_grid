@@ -1,0 +1,6 @@
+interface:
+  display_name: "Vice Grid"
+  short_description: "Repo-specific patterns and workflows for vice_grid"
+  default_prompt: "Use the vice_grid repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true
