@@ -17,6 +17,10 @@ python -m http.server 8930
 Any static file server works (ES modules require http://, not file://).
 Chrome/Edge/Firefox current versions supported.
 
+The latest build from `main` is deployed automatically to the
+[live test site](https://therealblainikiara.github.io/vice_grid/) after its
+tests and campaign validation pass.
+
 - **Single player**: keyboard + mouse (see [docs/CONTROLS.md](docs/CONTROLS.md))
 - **Local co-op**: connect a gamepad and press **Start** to drop in as the
   partner agent at any time.
@@ -24,7 +28,9 @@ Chrome/Edge/Firefox current versions supported.
 ## Development
 
 ```
-node --test        # run the unit test suite
+npm test          # run the unit test suite
+npm run validate  # validate all campaign and operation definitions
+npm run build     # build dist/vice-grid-demo.html
 ```
 
 - `src/` — ES modules. Pure logic (combat, arrest, grading, save, objectives)

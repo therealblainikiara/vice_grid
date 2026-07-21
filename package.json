@@ -6,6 +6,8 @@
   "private": true,
   "scripts": {
     "test": "node --test",
+    "validate": "node tools/validate.js",
+    "build": "node tools/build.mjs",
     "serve": "python -m http.server 8930"
   },
   "dependencies": {
