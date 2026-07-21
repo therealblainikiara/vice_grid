@@ -1,4 +1,6 @@
-// input.js — keyboard / mouse / wheel / gamepad with fully rebindable controls.
+// input.js — keyboard / mouse / wheel / gamepad / touch controls.
+
+import { makeTouchControls } from './touch.js';
 //
 // Every action holds an ARRAY of bindings, so W and Up-Arrow (or E and
 // right-click) are the same action rather than competing schemes. Codes are
@@ -75,6 +77,7 @@ export function makeInput(canvas, settings) {
   const mouse = { x: canvas.width / 2, y: canvas.height / 2, buttons: new Set() };
   let wheelDir = null, wheelUntil = 0;
   let capture = null; // rebinding: a callback awaiting the next input
+  const touch = makeTouchControls(document.getElementById('touch-controls'), settings);
 
   const binds = (action) => {
     const b = settings.bindings?.[action] ?? DEFAULT_BINDINGS[action] ?? [];
@@ -181,6 +184,8 @@ export function makeInput(canvas, settings) {
         const g = pad(0);
         return g ? readPad(g) : readKeyboard();
       }
+      const touchControls = touch.read();
+      if (touchControls) return touchControls;
       return readKeyboard();
     }
     const g = pad(settings.p1Gamepad ? 1 : 0);
@@ -220,6 +225,8 @@ export function makeInput(canvas, settings) {
   return {
     readControls, padJoinPressed, vibrate, pollCapture,
     gamepadConnected: () => !!pad(0),
+    syncTouchVisibility: touch.syncVisibility,
+    touchBlocked: touch.blocked,
     menu: {
       up: () => keys.has('ArrowUp') || keys.has('KeyW'),
       down: () => keys.has('ArrowDown') || keys.has('KeyS'),

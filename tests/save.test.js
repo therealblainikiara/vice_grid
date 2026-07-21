@@ -68,6 +68,7 @@ test('settings merge over defaults and survive corruption', () => {
   saveSettings(storage, { ...DEFAULT_SETTINGS, musicVol: 0.1 });
   assert.equal(loadSettings(storage).musicVol, 0.1);
   assert.equal(loadSettings(storage).sfxVol, DEFAULT_SETTINGS.sfxVol);
+  assert.equal(loadSettings(storage).touchControls, 'auto');
   storage.setItem('vicegrid.settings.v1', '!!!');
   assert.deepEqual(loadSettings(storage), DEFAULT_SETTINGS);
 });
