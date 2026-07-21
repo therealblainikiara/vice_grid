@@ -22,6 +22,7 @@ The latest build from `main` is deployed automatically to the
 tests and campaign validation pass.
 
 - **Single player**: keyboard + mouse (see [docs/CONTROLS.md](docs/CONTROLS.md))
+- **Mobile**: landscape twin-stick touch controls on phones and tablets
 - **Local co-op**: connect a gamepad and press **Start** to drop in as the
   partner agent at any time.
 

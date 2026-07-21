@@ -17,6 +17,7 @@ and persist across sessions.
 | Difficulty presets | Rookie / Agent / Kingpin (enemy damage, health, aggression) |
 | Remappable controls | Keyboard bindings stored in settings (`bindings` map) |
 | Menu navigation | Every screen operable by arrow keys + Enter, mouse, or gamepad focus |
+| Touch controls | Automatic landscape twin-stick layout; can be forced on or off |
 
 Planned (tracked in DEVELOPMENT_STATE.md): colour-vision filter modes,
 text-to-speech-friendly labels audit, rebinding UI surface.

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VICE GRID</title>
 <style>
   :root {
@@ -131,6 +131,90 @@
   #subtitle b { color: var(--gold); }
   .keyrow { display: grid; grid-template-columns: auto auto; gap: 2px 18px; text-align: left; font-size: .8rem; color: #b9c4d4; }
   .keyrow b { color: var(--paper); }
+  .touch-hint { display: none; }
+  body.touch-enabled .keyrow { display: none; }
+  body.touch-enabled .touch-hint { display: block; }
+
+  /* Touch controls: landscape twin-stick keeps both thumbs anchored while
+     the action buttons remain reachable without crossing the playfield. */
+  #touch-controls { display: none; position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+  body.touch-enabled.gameplay-active #touch-controls { display: block; }
+  .touch-stick {
+    position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); width: 118px; height: 118px;
+    border-radius: 50%; border: 2px solid rgba(245,234,211,.28); pointer-events: auto;
+    touch-action: none; background: radial-gradient(circle, rgba(255,255,255,.08), rgba(5,7,10,.28) 65%);
+    box-shadow: inset 0 0 22px rgba(0,0,0,.35); user-select: none;
+  }
+  #touch-move { left: max(16px, env(safe-area-inset-left)); }
+  #touch-aim { right: max(16px, env(safe-area-inset-right)); border-color: rgba(255,79,216,.42); }
+  .touch-stick::after {
+    content: attr(data-label); position: absolute; inset: auto 0 13px; text-align: center;
+    font-size: .62rem; letter-spacing: .12em; color: rgba(245,234,211,.55);
+  }
+  .touch-knob {
+    position: absolute; width: 52px; height: 52px; left: 31px; top: 31px; border-radius: 50%;
+    background: rgba(49,211,255,.30); border: 2px solid rgba(49,211,255,.8);
+    box-shadow: 0 0 18px rgba(49,211,255,.25); pointer-events: none; will-change: transform;
+  }
+  #touch-aim .touch-knob { background: rgba(255,79,216,.28); border-color: rgba(255,79,216,.82); box-shadow: 0 0 18px rgba(255,79,216,.25); }
+  #touch-buttons {
+    position: absolute; bottom: max(12px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    display: grid; grid-template-columns: repeat(3, 62px); gap: 7px; pointer-events: none;
+  }
+  #touch-controls button {
+    min-width: 0; width: 62px; height: 46px; padding: 0 4px; border-radius: 14px; pointer-events: auto;
+    touch-action: none; user-select: none; -webkit-user-select: none; font-size: .66rem; letter-spacing: .04em;
+    background: rgba(7,10,16,.62); backdrop-filter: blur(3px);
+  }
+  #touch-controls button.primary { color: var(--teal); border-color: rgba(88,208,186,.7); }
+  #touch-controls button.pressed { transform: scale(.92); color: var(--gold); border-color: var(--gold); background: rgba(255,217,79,.20); }
+  #touch-pause {
+    position: absolute; right: max(10px, env(safe-area-inset-right)); top: max(78px, env(safe-area-inset-top));
+    width: 46px !important; height: 38px !important; border-radius: 10px !important; font-size: 1rem !important;
+  }
+  #orientation-gate {
+    display: none; position: absolute; inset: 0; z-index: 9; align-items: center; justify-content: center;
+    text-align: center; padding: 30px; background: rgba(5,7,10,.96); color: var(--paper); pointer-events: auto;
+  }
+  #orientation-gate b { display: block; color: var(--gold); font-size: 1.25rem; margin-bottom: 8px; }
+
+  @media (pointer: coarse) {
+    html, body, #wrap, canvas { touch-action: none; overscroll-behavior: none; }
+    button { min-height: 44px; }
+  }
+
+  @media (orientation: portrait) {
+    body.touch-enabled.gameplay-active #orientation-gate { display: flex; }
+    body.touch-enabled.gameplay-active #touch-controls { display: none; }
+  }
+
+  @media (pointer: coarse) and (orientation: landscape), (max-height: 600px) and (orientation: landscape) {
+    .screen { padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); gap: 8px; overflow-y: auto; }
+    .screen button { min-width: min(280px, 82vw); padding: 9px 18px; }
+    h1.logo { font-size: clamp(2.3rem, 9vw, 4rem); }
+    .agent-card { width: min(310px, 42vw); }
+    #screen-briefing .panel, #screen-results .panel, #screen-settings .panel, .screen .panel { max-height: 64vh; padding: 12px 16px; }
+    .pbox { top: max(6px, env(safe-area-inset-top)); width: 180px; padding: 5px 8px; background: rgba(10,13,18,.70); }
+    #p1box { left: max(7px, env(safe-area-inset-left)); }
+    #p2box { right: max(7px, env(safe-area-inset-right)); }
+    .pbox .pname { font-size: .66rem; } .ammo { font-size: .62rem; } .hpbar { height: 6px; margin: 3px 0; }
+    #objbox { top: max(6px, env(safe-area-inset-top)); min-width: 0; width: min(42vw, 330px); max-height: 76px; overflow: hidden; padding: 5px 8px; background: rgba(10,13,18,.70); }
+    #objectives { font-size: .61rem; line-height: 1.35; }
+    #objectives .obj-done:not(.obj-primary) { display: none; }
+    #scorebox { top: max(7px, env(safe-area-inset-top)); right: max(7px, env(safe-area-inset-right)); bottom: auto; padding: 5px 9px; font-size: .72rem; }
+    #log { display: none; }
+    #subtitle { bottom: 138px; max-width: 58vw; padding: 5px 10px; font-size: .72rem !important; }
+    #banner { top: 28%; max-width: 78vw; white-space: normal; text-align: center; font-size: 1.15rem; }
+  }
+
+  @media (pointer: coarse) and (orientation: landscape) and (max-width: 740px) {
+    .touch-stick { width: 104px; height: 104px; }
+    .touch-knob { width: 46px; height: 46px; left: 27px; top: 27px; }
+    #touch-buttons { grid-template-columns: repeat(3, 54px); gap: 5px; }
+    #touch-controls button { width: 54px; height: 42px; font-size: .58rem; }
+    .pbox { width: 154px; }
+    #objbox { width: 40vw; }
+  }
 </style>
 </head>
 <body>
@@ -146,6 +230,19 @@
     <div id="banner"></div>
     <div id="subtitle"></div>
     <div id="hurt"></div>
+    <div id="touch-controls" aria-label="Touch game controls">
+      <div class="touch-stick" id="touch-move" data-stick="move" data-label="MOVE" aria-label="Movement joystick"><div class="touch-knob"></div></div>
+      <div id="touch-buttons">
+        <button type="button" class="primary" data-touch-action="interact">ACT</button>
+        <button type="button" data-touch-action="dodge">DODGE</button>
+        <button type="button" data-touch-action="command">FREEZE</button>
+        <button type="button" data-touch-action="swap">SWAP</button>
+        <button type="button" data-touch-action="melee">MELEE</button>
+      </div>
+      <div class="touch-stick" id="touch-aim" data-stick="aim" data-label="AIM + FIRE" aria-label="Aim and fire joystick"><div class="touch-knob"></div></div>
+      <button type="button" id="touch-pause" data-touch-action="pause" aria-label="Pause">Ⅱ</button>
+    </div>
+    <div id="orientation-gate"><div><b>ROTATE TO LANDSCAPE</b>VICE GRID uses twin-stick controls and pauses while your device is upright.</div></div>
   </div>
 
   <section class="screen active" id="screen-title">
@@ -196,6 +293,7 @@
         <span><b>Shift</b> aim &amp; intimidate · <b>Space</b> dodge · <b>F</b> melee</span><span><b>Scroll</b> or <b>Q</b> swap weapon · <b>R</b> reload</span>
         <span><b>G</b> shout FREEZE · <b>Esc</b> pause</span><span>Controller supported — rebind everything in Settings → Controls</span>
       </div>
+      <div class="hint touch-hint">Left stick moves · right stick aims and fires · ACT cuffs, revives, collects, and enters vehicles · empty weapons reload automatically</div>
     </div>
     <button id="btn-deploy">Deploy</button>
   </section>

@@ -76,6 +76,7 @@ export const DEFAULT_SETTINGS = {
   reducedFlash: false, gameSpeed: 1.0, difficulty: 'agent',
   retroFilter: false,
   p1Gamepad: false,   // Player 1 drives with a controller instead of kb+mouse
+  touchControls: 'auto', // auto | on | off
   bindings: null,     // null = defaults from input.js; else { action: [code,...] }
 };
 

@@ -304,6 +304,7 @@ on('btn-settings-back', () => {
 ui.buildSettingsPanel((key) => {
   if (key === 'musicVol' || key === 'sfxVol') audio.applyVolumes();
   if (key === 'retroFilter') applyRetroFilter();
+  if (key === 'touchControls') input.syncTouchVisibility();
   persistSettings();
 });
 ui.buildControlsPanel(input, persistSettings);
@@ -367,7 +368,9 @@ function frame(now) {
   last = now;
   input.pollCapture(); // gamepads emit no events; rebinding must poll them
 
-  if (state === 'play' && world) {
+  const touchBlocked = input.touchBlocked();
+  if (touchBlocked) acc = 0;
+  if (state === 'play' && world && !touchBlocked) {
     // adjustable game speed applies to single player only (accessibility)
     const speedMul = world.players.length === 1 ? (settings.gameSpeed ?? 1) : 1;
     acc += raw * speedMul;

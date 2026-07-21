@@ -33,6 +33,26 @@ Tick **Settings → Player 1 uses a controller** to drive Player 1 from the pad
 In co-op with Player 1 on keyboard, Player 2 simply presses **Start** on a pad
 to drop in at any time — no menu required.
 
+## Playing on a phone or tablet
+
+Touch controls appear automatically on coarse-pointer devices and are designed
+for landscape orientation. Settings → Touch controls can force them on or off.
+
+| Touch control | Action |
+|---|---|
+| Left stick | Move / steer |
+| Right stick | Aim and fire; release to stop firing |
+| ACT | Cuff, revive, collect, enter or leave a vehicle |
+| DODGE | Dodge; handbrake while driving |
+| FREEZE | Shout and force a nearby morale check |
+| SWAP | Cycle weapon |
+| MELEE | Close-range strike |
+| Ⅱ | Pause |
+
+Weapons reload automatically when the current magazine is empty. Portrait play
+is paused behind a rotate-device prompt because the twin-stick combat view needs
+the horizontal space and safe thumb separation provided by landscape.
+
 ## Arrest flow
 
 1. Pressure a suspect: wound them, drop their friends, aim at them, or shout FREEZE.

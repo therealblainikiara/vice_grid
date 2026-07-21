@@ -17,6 +17,7 @@ export function makeUI(settings, audio) {
   function show(name) {
     for (const s of screens) $('screen-' + s)?.classList.toggle('active', s === name);
     $('hud').classList.toggle('active', name === null || name === 'pause');
+    document.body.classList.toggle('gameplay-active', name === null);
     if (name) focusFirst($('screen-' + name));
   }
 
@@ -229,6 +230,7 @@ export function makeUI(settings, audio) {
       ['reducedFlash', 'Reduce flashing', 'check'],
       ['retroFilter', 'Retro scanline filter', 'check'],
       ['p1Gamepad', 'Player 1 uses a controller', 'check'],
+      ['touchControls', 'Touch controls', 'select', ['auto', 'on', 'off']],
       ['difficulty', 'Difficulty', 'select', ['rookie', 'agent', 'kingpin']],
     ];
     $('settings-body').innerHTML = defs.map(([key, label, kind, a, b]) => {
