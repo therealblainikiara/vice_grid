@@ -1,0 +1,279 @@
+# Instincts generated from https://github.com/therealblainikiara/vice_grid
+# Generated: 2026-07-21T02:16:20.280Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: vice_grid-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/therealblainikiara/vice_grid
+---
+
+# Vice_grid Commit Length
+
+## Action
+
+Keep commit messages concise (~39 characters)
+
+## Evidence
+
+- Average commit message length: 39 chars
+- Based on 1 commits
+
+---
+id: vice_grid-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/therealblainikiara/vice_grid
+---
+
+# Vice_grid Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: vice_grid-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/therealblainikiara/vice_grid
+---
+
+# Vice_grid Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: vice_grid-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/therealblainikiara/vice_grid
+---
+
+# Vice_grid Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: vice_grid-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/therealblainikiara/vice_grid
+---
+
+# Vice_grid Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: vice_grid-instinct-file-naming
+trigger: "When creating a new source file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct File Naming
+
+## Action
+
+Name the file using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.files
+
+---
+id: vice_grid-instinct-function-naming
+trigger: "When defining a function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: vice_grid-instinct-class-naming
+trigger: "When defining a class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: vice_grid-instinct-constant-naming
+trigger: "When declaring a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for the constant name
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: vice_grid-instinct-import-style
+trigger: "When importing modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle
+
+---
+id: vice_grid-instinct-export-style
+trigger: "When exporting from a module"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle
+
+---
+id: vice_grid-instinct-error-handling
+trigger: "When handling errors in code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct Error Handling
+
+## Action
+
+Use try-catch blocks for error handling
+
+## Evidence
+
+- Pattern in errorHandling.style
+
+---
+id: vice_grid-instinct-test-location
+trigger: "When adding new tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct Test Location
+
+## Action
+
+Place test files in the 'tests' directory, separate from 'src'
+
+## Evidence
+
+- Pattern in folderStructure.testLocation
+- Common folder 'tests'
+
+---
+id: vice_grid-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: therealblainikiara/vice_grid
+---
+
+# Vice_grid Instinct Commit Format
+
+## Action
+
+Write a short, freeform message without a prefix; average length ~39 characters
+
+## Evidence
+
+- Pattern in commits.type
+- Example commit: 'Refactor world and campaign story state'
+
