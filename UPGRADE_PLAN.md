@@ -59,9 +59,12 @@ Per-mission wall/floor themes landed (checkpoint 3). Remaining:
 
 - [~] Physical gamepad path CODE-REVIEWED (input.js: analog triggers 6/7,
       left-stick move / right-stick aim, co-op slot routing pad0/pad1,
-      Start-to-join, rumble). Correct on review + detection API confirmed in
-      browser. FINAL hardware sign-off (real controller drop-in / rumble)
-      still needs a physical pad — cannot be done autonomously.
+      Start-to-join, rumble) + detection UX HARDENED after real-hardware
+      feedback: status updates instantly on `gamepadconnected`, explains that
+      browsers hide a pad until a button is pressed, and prompts to enable
+      "Player 1 uses a controller". Read path tolerates 6-button/4-axis pads.
+      FINAL hardware sign-off (does the user's USB stick now drive P1?) still
+      needs the user at the keyboard — cannot be done autonomously.
 - [x] P2 upgrade-point spending: FIXED. Both agents share one upgrade
       loadout (addPlayer applies the same settings.upgrades to every slot),
       so the co-op point "split" was routing half of every reward into a
@@ -74,20 +77,33 @@ Per-mission wall/floor themes landed (checkpoint 3). Remaining:
 
 ## Phase D — Content & release polish
 
-- [ ] Story recap screen: confirm every mission has recap copy (screen shipped
-      mid-session; audit `showRecap` content for all 24 entries)
-- [ ] NG+ kingpin difficulty: balance pass (difficulty flips on cycle 1; no
-      tuning has been play-verified)
-- [ ] Republish the shareable demo artifact from the current build (the
-      published artifact predates the rendering repair + environments)
-- [ ] README: expand for the public GitHub repo (screenshots, controls,
-      build/run instructions)
+- [x] Story recap AUDITED: showRecap builds each recap from the previous
+      mission's debriefWin + the act premise. Verified all 24 missions have
+      debriefWin copy and ACTS covers acts 1–4 with title + premise — no
+      missing/undefined recap text. (Minor: OPs show the intro dispatch since
+      they aren't in the main sequence — cosmetic, left as-is.)
+- [ ] NG+ kingpin difficulty: balance pass. Difficulty flips to kingpin on
+      cycle 1; the scaling is wired but NOT play-tuned. Needs a play session
+      to judge — cannot be responsibly tuned without playing.
+- [x] Shareable demo: SUPERSEDED by the live site. `.github/workflows/pages.yml`
+      auto-deploys the freshly-built self-contained demo to
+      https://therealblainikiara.github.io/vice_grid/ on every green push, so
+      the link is always current rather than a stale one-off artifact.
+- [x] README: already accurate and comprehensive (play/build/dev, controls,
+      co-op, live-site link, __vg debug API). Verified against actual npm
+      scripts and docs/.
 
 ## Phase E — Infrastructure
 
-- [ ] GitHub Actions CI: run `node --test` + `node tools/validate.js` on push
-- [ ] Set git identity for this repo (commits currently carry the
-      auto-detected work address)
+- [x] GitHub Actions CI: DONE and stronger than specified. pages.yml runs
+      `npm test` + `npm run validate` + `npm run build` on push AND PR, gating
+      the live deploy. ADDED a static guard that fails CI if render3d.js ever
+      carries a `#version` shader directive or `sampler3D` — the exact
+      black-screen regression signature the unit tests can't catch.
+- [ ] Set git identity for this repo. Commits still carry the auto-detected
+      work address (pryan@airconserve.com.au). Needs the user's chosen
+      name/email — cannot guess it. Run:
+      `git config user.name "…"; git config user.email "…"`.
 
 ## Definition of done per phase
 

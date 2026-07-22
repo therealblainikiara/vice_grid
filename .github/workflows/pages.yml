@@ -31,6 +31,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Guard against the WebGL black-screen shader regression
+        # The unit tests pass even when the renderer is broken, so this repo has
+        # been black-screened twice by shaders written in the wrong GLSL dialect.
+        # three.js prepends its own "#version 300 es" preamble, so any #version
+        # directive or sampler3D (the reverted LUT) in render3d.js fails WebGL.
+        run: |
+          if grep -nE '^[[:space:]]*#version' src/render3d.js; then
+            echo "::error::render3d.js shader carries a #version directive; three adds its own. Use GLSL1 (varying / texture2D / gl_FragColor)."
+            exit 1
+          fi
+          if grep -n 'sampler3D' src/render3d.js; then
+            echo "::error::render3d.js uses sampler3D (the reverted noir-LUT bug). Remove it."
+            exit 1
+          fi
+
       - name: Run unit tests
         run: npm test
 
