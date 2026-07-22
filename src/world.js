@@ -202,6 +202,27 @@ function moveCircle(w, e, dx, dy) {
   }
 }
 
+// True when a radius-R circle at (x,y) overlaps any wall/border.
+function inSolid(w, x, y, r = R) {
+  return solidAt(w, x - r, y) || solidAt(w, x + r, y) || solidAt(w, x, y - r) || solidAt(w, x, y + r);
+}
+
+// Find the nearest point clear of walls, spiralling out from (x,y). Used to eject
+// an entity that ends up inside geometry (e.g. spilling out of a wrecked car
+// against a wall) so it can never be trapped inside a building.
+function nearestOpen(w, x, y, r = R) {
+  if (!inSolid(w, x, y, r)) return { x, y };
+  for (let ring = 1; ring <= 14; ring++) {
+    const step = ring * (TILE / 2);
+    for (let a = 0; a < 8; a++) {
+      const px = x + Math.cos(a / 8 * TAU) * step;
+      const py = y + Math.sin(a / 8 * TAU) * step;
+      if (!inSolid(w, px, py, r)) return { x: px, y: py };
+    }
+  }
+  return { x, y };
+}
+
 function hasLos(w, x0, y0, x1, y1) {
   const d = dist(x0, y0, x1, y1);
   const steps = Math.ceil(d / (TILE / 3));
@@ -492,6 +513,14 @@ function updatePlayer(w, p, dt, c) {
   p.commandCd = Math.max(0, p.commandCd - dt);
   for (const ws of p.weapons) tickWeapon(ws, dt);
   if (p.downed || !c) { p.cuffingId = null; return; }
+
+  // Safety net: if the agent is ever inside geometry (physics nudge, a wreck
+  // spilling them badly, a spawn overlap), eject them to open ground so they
+  // can never be trapped in a wall.
+  if (p.vehicleId == null && inSolid(w, p.x, p.y)) {
+    const open = nearestOpen(w, p.x, p.y);
+    p.x = open.x; p.y = open.y;
+  }
 
   const upgrades = w.settings?.upgrades ?? {};
   const ue = upgradeEffects(upgrades);
@@ -1102,12 +1131,30 @@ function updateVehicles(w, dt) {
         c = { throttle: ahead ? -0.8 : (Math.abs(v.speed) < v.cruise ? 0.5 : 0), steer: steerToLane * (facingEast ? 1 : -1), handbrake: false };
       }
     }
+    // AI wall avoidance: don't ram map geometry. Probe ahead; if a wall is
+    // there, brake and steer toward whichever side is clear. Fixes cars and
+    // bikes driving straight into buildings.
+    if (v.ai && !v.disabled && v.driverSlot == null) {
+      const la = v.r + 34;
+      if (solidAt(w, v.x + Math.cos(v.angle) * la, v.y + Math.sin(v.angle) * la)) {
+        c.throttle = Math.min(c.throttle, -0.25);
+        const leftClear = !solidAt(w, v.x + Math.cos(v.angle - 0.9) * la, v.y + Math.sin(v.angle - 0.9) * la);
+        c.steer = leftClear ? -0.9 : 0.9;
+      }
+    }
     const d = stepVehicle(v, c, dt, w);
-moveVehicle(w, v, d.dx, d.dy);
-    checkSpikeStrips(v, w);
+    moveVehicle(w, v, d.dx, d.dy);
     checkSpikeStrips(v, w);
     // traffic despawn at the map ends
     if (v.ai === 'traffic' && (v.x < 40 || v.x > w.cols * TILE - 40)) v.gone = true;
+    // An escort that flees off the map, or wedges against a wall out of reach,
+    // still counts toward "disable the escorts" — otherwise the mission
+    // soft-locks at 2/3 when a runner drives off past a wrecked interceptor.
+    if (v.ai === 'escort' && v.tag === 'escort' && !v.disabled && v.driverSlot == null) {
+      const offMap = v.x < 24 || v.x > w.cols * TILE - 24;
+      v.wallStuck = (Math.abs(v.speed) < 22 && inSolid(w, v.x, v.y, v.r)) ? (v.wallStuck ?? 0) + dt : 0;
+      if (offMap || v.wallStuck > 3) countEscortGone(w, v);
+    }
   }
   w.vehicles = w.vehicles.filter((v) => !v.gone);
 
@@ -1155,6 +1202,18 @@ moveVehicle(w, v, d.dx, d.dy);
   }
 }
 
+// An escort that leaves the fight (fled off-map or wedged) counts once toward
+// the objective and despawns, so 3 required escorts always reach 3/3.
+function countEscortGone(w, v) {
+  if (!v.counted) {
+    v.counted = true;
+    objEvent(w, { type: 'neutralized', tag: 'escort' });
+    w.fx.log?.('Escort runner forced off the road');
+    saveCheckpoint(w);
+  }
+  v.gone = true;
+}
+
 function onVehicleDisabled(w, v, byPlayer) {
   w.effects.push({ kind: 'break', x: v.x, y: v.y, t: 0, dur: 0.5 });
   w.fx.explosion?.(v.x, v.y);
@@ -1178,7 +1237,7 @@ function onVehicleDisabled(w, v, byPlayer) {
       w.fx.log?.('A commuter was caught in the pursuit');
     }
   } else if (v.tag === 'escort') {
-    objEvent(w, { type: 'neutralized', tag: 'escort' });
+    if (!v.counted) { v.counted = true; objEvent(w, { type: 'neutralized', tag: 'escort' }); }
     w.fx.log?.('Escort runner disabled');
     // the driver bails out, rattled and often ready to quit
     const e = makeEnemy('lookout', v.x + 34, v.y, w);
@@ -1196,8 +1255,12 @@ function onVehicleDisabled(w, v, byPlayer) {
       if (p.vehicleId === v.id) {
         p.vehicleId = null;
         p.hitFlash = 0.12;
-        p.x = v.x + Math.cos(v.angle + Math.PI / 2) * (v.r + 24);
-        p.y = v.y + Math.sin(v.angle + Math.PI / 2) * (v.r + 24);
+        // Spill out beside the wreck, but never into a wall — a car wrecked
+        // against a building used to plant the agent inside it, trapped.
+        const sx = v.x + Math.cos(v.angle + Math.PI / 2) * (v.r + 24);
+        const sy = v.y + Math.sin(v.angle + Math.PI / 2) * (v.r + 24);
+        const open = nearestOpen(w, sx, sy);
+        p.x = open.x; p.y = open.y;
       }
     }
     v.driverSlot = null;

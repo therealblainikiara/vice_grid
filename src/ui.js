@@ -266,8 +266,11 @@ export function makeUI(settings, audio) {
         onChange(key);
       });
     });
-    // Update gamepad status periodically
+    // Update gamepad status periodically AND the instant a pad announces itself
+    // (fires on the first button press) so the user gets immediate feedback.
     setInterval(updateGamepadStatus, 1000);
+    window.addEventListener('gamepadconnected', updateGamepadStatus);
+    window.addEventListener('gamepaddisconnected', updateGamepadStatus);
     updateGamepadStatus();
   }
 
@@ -277,11 +280,16 @@ export function makeUI(settings, audio) {
     const el = document.getElementById('gp-status');
     if (!el) return;
     if (connected.length === 0) {
-      el.textContent = 'No gamepad detected';
-      el.style.color = '#ff5f5f';
+      // Browsers hide a pad until it sends input, so "nothing" usually just
+      // means "press a button first" rather than a real detection failure.
+      el.innerHTML = 'None yet — <b>press any button on the controller</b> with this window focused (browsers hide a pad until it sends input).';
+      el.style.color = '#ffb04f';
     } else {
-      el.textContent = connected.map((p, i) => `${i + 1}. ${p.id} (${p.buttons.length} btns, ${p.axes.length} axes)`).join(' | ');
-      el.style.color = '#58d0ba';
+      const list = connected.map((p, i) => `${i + 1}. ${p.id || 'controller'} (${p.buttons.length} btns, ${p.axes.length} axes)`).join(' | ');
+      const needP1 = !settings.p1Gamepad
+        ? ' — <b style="color:#ffd94f">tick “Player 1 uses a controller” above to drive P1 with it</b> (otherwise it only joins as Player 2 by pressing Start).'
+        : ' — active for Player 1.';
+      el.innerHTML = `<span style="color:#58d0ba">${list}</span>${needP1}`;
     }
   }
 
