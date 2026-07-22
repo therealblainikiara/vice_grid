@@ -14,26 +14,25 @@ speed +15%/lvl). Every named unlock below is currently description-only.
 Implement in world.js (pure sim) + input/render support, one test per effect.
 
 - [x] Weapons L2: +12% fire rate, reduced recoil (scale weapon cooldown/spread)
-- [ ] Weapons L3: alt-fire mode (hold aim + fire; per-weapon secondary)
-- [ ] Weapons L4: special ammo — incendiary / shock rounds (status effects)
+- [x] Weapons L3: alt-fire — aim+fire launches a heavy slug (1.8× dmg, heavy KB)
+- [x] Weapons L4: incendiary ammo — hits burn for 6 dmg/s over 2.5s
 - [x] Armour L2: +10% damage reduction
 - [x] Armour L3: knockback resistance
 - [x] Armour L4: out-of-combat regen (1 HP/s after ~4s without damage)
 - [x] Mobility L2: dodge cooldown −20%, dodge distance +15%
-- [ ] Mobility L3: combat slide (crouch + dodge chord)
-- [ ] Mobility L4: sprint burst (2× speed 3s, 20s cooldown, HUD pip)
+- [x] Mobility L3: combat slide — dodge while aiming, longer + full i-frames, can shoot through
+- [x] Mobility L4: sprint burst — double-tap dodge unarmed, 2× speed 3s / 20s CD
 - [x] Enforcement L1: +10% intimidate radius (cuff speed half is done)
-- [ ] Enforcement L2: intimidate morale flash on nearby suspects
+- [x] Enforcement L2: intimidate flash — FREEZE forces on-the-spot surrenders
 - [x] Enforcement L3: auto-cuff downed suspects in range
-- [ ] Enforcement L4: cuff flashbang stun
-- [ ] Intelligence L1: gate the evidence compass behind this (today it keys
-      off the intel stat, not the upgrade)
-- [ ] Intelligence L2: aimed-suspect highlight
-- [ ] Intelligence L3: nerve read — show morale/surrender chance on aim
-- [ ] Intelligence L4: hackable turrets/cameras — requires adding turret and
-      camera props to maps first (none exist in the sim yet)
-- [ ] Alternatively: trim any of the above from UPGRADE_DEFS rather than ship
-      a shop that sells effects that do nothing. No sold-but-inert upgrades.
+- [x] Enforcement L4: cuff flashbang — arrests stun/rattle nearby enemies
+- [x] Intelligence L1: evidence compass (already gated on the intelligence upgrade)
+- [x] Intelligence L2: aimed-suspect highlight (target glows when aimed at)
+- [x] Intelligence L3: nerve read — SHAKEN label on breaking suspects (already present)
+- [x] Intelligence L4: REDEFINED from inert "hack turrets" (no such entities) to
+      Deep scan — through-wall markers over all evidence + every enemy
+- [x] No sold-but-inert upgrades remain: all 20 UPGRADE_DEFS levels do what
+      their shop text says, with unit tests pinning the effect gates.
 
 ## Phase B — Environment believability, pass 2
 
