@@ -659,48 +659,64 @@ MISSIONS.m09 = {
     ],
   },
   debriefLose: { speaker: 'DISPATCH', lines: ['They torched the store. Months of names, gone. Take the precinct back.'] },
+  // DEFENSE: you do not advance and clear — you hold. Civic Shield breach the
+  // lobby in escalating waves; the next only comes once you have put the last
+  // one down. Survive them all and GRAFT walks in for the final stand.
   objectives: [
-    { id: 'clear', label: 'Repel the Civic Shield raid', primary: true, type: 'neutralize', count: 10, tag: 'gunman' },
+    { id: 'hold', label: 'Hold the precinct — repel every wave', primary: true, type: 'survive' },
     { id: 'boss', label: 'Take down CAPTAIN GRAFT', primary: true, type: 'boss' },
     { id: 'cuffs', label: 'Optional: Arrest 4 raiders', primary: false, type: 'arrest', count: 4 },
     { id: 'civs', label: 'Optional: Keep the clerks safe (1 strike allowed)', primary: false, type: 'protect', count: 1 },
     { id: 'ledger', label: 'Optional: Secure the internal-affairs files', primary: false, type: 'evidence', count: 2 },
   ],
-  escalation: {
-    at: 5,
-    banner: 'SECOND WAVE BREACHES THE LOBBY',
-    spawns: [
-      { type: 'cs_shield', x: 15, y: 19 }, { type: 'cs_tactical', x: 17, y: 19 },
-      { type: 'cs_shield', x: 19, y: 19 }, { type: 'cs_trooper', x: 16, y: 20 },
-    ],
-  },
+  waves: [
+    { delay: 2, banner: 'WAVE 1 — CIVIC SHIELD BREACH THE LOBBY', spawns: [
+      { type: 'cs_trooper', x: 14, y: 20 }, { type: 'cs_trooper', x: 17, y: 20 }, { type: 'cs_tactical', x: 20, y: 20 },
+    ] },
+    { delay: 4, banner: 'WAVE 2 — SHIELDS UP', spawns: [
+      { type: 'cs_shield', x: 15, y: 20 }, { type: 'cs_tactical', x: 17, y: 20 }, { type: 'cs_shield', x: 19, y: 20 }, { type: 'cs_trooper', x: 16, y: 19 },
+    ] },
+    { delay: 4, banner: 'WAVE 3 — THEY COMMIT EVERYTHING', spawns: [
+      { type: 'cs_shield', x: 14, y: 20 }, { type: 'cs_tactical', x: 16, y: 20 }, { type: 'cs_tactical', x: 18, y: 20 }, { type: 'cs_shield', x: 20, y: 20 }, { type: 'cs_trooper', x: 17, y: 19 },
+    ] },
+  ],
   boss: {
-    type: 'graft', x: 17, y: 18, name: 'CAPTAIN GRAFT',
+    type: 'graft', x: 17, y: 18, trigger: 'waves', name: 'CAPTAIN GRAFT',
     intro: 'CAPTAIN GRAFT: "Twenty-two years I kept this city quiet. You two are just noise."',
     phase2At: 0.5, phase2Banner: 'GRAFT CALLS HIS PERSONAL DETAIL',
     phase2Spawns: [{ type: 'cs_shield', x: 14, y: 18 }, { type: 'cs_tactical', x: 20, y: 18 }],
     surrenderAt: 0.15,
   },
+  // A real precinct floor, not a box: you enter through reception, hold the
+  // bullpen of desk cubicles, and the secure wing (records / evidence / holding)
+  // is up top. Believable architecture — reception counter, lift bank, private
+  // offices, corridors — so it reads as a building, not an arena.
   map: buildMap(34, 22, ({ set, rect, rowFill }) => {
-    // records room (NW), evidence store (NE), offices between
-    rowFill(6, '#');
-    rect(8, 6, 3, 1, '.'); rect(24, 6, 3, 1, '.');   // two doors through
-    rect(11, 1, 1, 5, '#'); rect(22, 1, 1, 5, '#');  // room dividers
-    set(3, 2, 'V'); set(30, 2, 'V');                  // IA files + evidence log
-    rect(2, 3, 2, 2, 's'); rect(30, 3, 2, 2, 's');
-    set(6, 3, 'E'); set(27, 3, 'E');
-    set(15, 2, 'm'); set(18, 2, 'p');
-    // bullpen: desks as cover, clerks sheltering
-    for (const [cx, cy] of [[6, 9], [12, 9], [20, 9], [26, 9], [9, 13], [16, 13], [23, 13]]) { set(cx, cy, 'c'); set(cx + 2, cy, 'c'); }
-    set(4, 11, 'C'); set(29, 11, 'C'); set(13, 15, 'C'); set(21, 15, 'C');
-    set(8, 10, 'E'); set(18, 10, 'E'); set(28, 10, 'E');
-    set(6, 14, 'E'); set(15, 14, 'E'); set(25, 14, 'E');
-    set(11, 16, 'E'); set(23, 16, 'E');
-    // lobby + street: the breach comes from the south
-    rowFill(17, '#');
-    rect(14, 17, 7, 1, '.');                          // shattered lobby doors
-    rowFill(20, ',');
-    set(4, 19, 'P'); set(30, 19, 'w');
+    // ---- SECURE WING (y1-6): records (W) | central booking + cells | evidence (E)
+    rowFill(7, '#'); rect(9, 7, 2, 1, '.'); rect(23, 7, 2, 1, '.');  // wing wall + 2 doors
+    rect(10, 1, 1, 6, '#'); rect(23, 1, 1, 6, '#');                  // split into three rooms
+    set(3, 2, 'V'); rect(2, 4, 3, 1, 's');                           // records: IA files + shelving
+    set(30, 2, 'V'); rect(28, 4, 3, 1, 's');                         // evidence store
+    rect(15, 2, 1, 4, '#'); rect(18, 2, 1, 4, '#');                  // two holding cells (central)
+    set(14, 4, 'C'); set(19, 4, 'C');                                // detainees / witnesses
+    set(16, 2, 'm');
+    // ---- PRIVATE OFFICES down the east wall (y9-16): three glass-front offices
+    rect(27, 9, 1, 8, '#');                                          // office corridor wall
+    rect(27, 11, 1, 1, '.'); rect(27, 14, 1, 1, '.');                // two office doorways
+    rect(30, 12, 1, 1, '#'); rect(30, 15, 1, 1, '#');                // office back partitions
+    set(30, 10, 'c'); set(30, 13, 'c'); set(30, 16, 'c');            // office desks
+    set(29, 10, 's'); set(29, 13, 's');                              // office shelving
+    // ---- BULLPEN (y9-16): orderly cubicle rows (divider + desk) with clear aisles
+    for (const gy of [9, 13]) for (const gx of [3, 8, 13, 18, 23]) { set(gx, gy, 's'); set(gx + 1, gy, 'c'); }
+    set(6, 11, 'C'); set(16, 11, 'C'); set(11, 15, 'C');             // clerks sheltering
+    set(5, 3, 'E'); set(28, 3, 'E'); set(12, 10, 'E'); set(20, 14, 'E'); // a few raiders already inside
+    // ---- RECEPTION LOBBY (y18-20): counter, lift bank, and the breached entrance
+    rowFill(17, '#'); rect(15, 17, 5, 1, '.');                       // lobby wall + shattered doors
+    rect(13, 18, 8, 1, 's'); rect(16, 18, 2, 1, '.');               // reception counter with a staff gap
+    rect(1, 18, 1, 3, '#'); rect(3, 18, 1, 3, '#'); rect(5, 18, 1, 3, '#'); rect(7, 18, 1, 3, '#'); // lift shafts
+    set(2, 18, '='); set(4, 18, '='); set(6, 18, '=');              // lift doors (metal)
+    rowFill(20, ',');                                                // entrance mat / street
+    set(10, 19, 'P'); set(29, 19, 'w');                             // player start + weapon locker
   }),
 };
 

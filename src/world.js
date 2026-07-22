@@ -61,6 +61,7 @@ export function createWorld(mission, opts) {
     viewW: 1280, viewH: 720,
     status: 'playing', endTimer: 0,
     escalated: false, bossSpawned: false, boss: null,
+    waveIndex: -1, waveState: 'pending', waveTimer: 1.6, wavesCleared: false,
     threat: 0, checkpoint: null, spawnPoints: [],
   };
 
@@ -367,6 +368,8 @@ export function updateWorld(w, dt, controlsBySlot) {
   // destructible cover (hp) and armed vats (fuse) are cullable.
   w.props = w.props.filter((pr) => pr.hp > 0 || pr.fuse != null || pr.spikes);
 
+  updateWaves(w, dt);
+
   // Escalation event
   const clearObj = w.objectives.find((o) => o.id === 'clear');
   const esc = w.mission.escalation;
@@ -402,9 +405,11 @@ export function updateWorld(w, dt, controlsBySlot) {
   const bossDef = w.mission.boss;
   // trigger names a vehicle tag (m03/m07 'truck', m10 'wrecker'); default is
   // the crew objective. The boss climbs out of whichever wreck triggered him.
-  const bossReady = bossDef?.trigger
-    ? w.vehicleDownTags.has(bossDef.trigger)
-    : clearObj?.done;
+  const bossReady = bossDef?.trigger === 'waves'
+    ? w.wavesCleared
+    : bossDef?.trigger
+      ? w.vehicleDownTags.has(bossDef.trigger)
+      : clearObj?.done;
   if (bossDef && !w.bossSpawned && bossReady) {
     w.bossSpawned = true;
     const wreck = bossDef.trigger ? w.vehicles.find((v) => v.tag === bossDef.trigger && v.disabled) : null;
@@ -1238,6 +1243,46 @@ function countEscortGone(w, v) {
     saveCheckpoint(w);
   }
   v.gone = true;
+}
+
+// Wave-defense driver (hold-the-line missions). A mission with `waves: [{spawns,
+// banner, delay}]` pins the player in place: each wave breaches after a delay,
+// and the next only comes once the current wave is neutralized. Clearing the
+// last wave fires a 'survived' event, completing a `type:'survive'` objective;
+// a boss with `trigger:'waves'` climbs in for the final stand.
+function updateWaves(w, dt) {
+  const waves = w.mission.waves;
+  if (!waves || w.wavesCleared) return;
+  if (w.waveState === 'pending') {
+    w.waveTimer -= dt;
+    if (w.waveTimer <= 0) {
+      w.waveIndex += 1;
+      const wave = waves[w.waveIndex];
+      for (const s of wave.spawns) {
+        const e = alertEnemy(makeEnemy(s.type, s.x * TILE + TILE / 2, s.y * TILE + TILE / 2, w));
+        e.waveTag = w.waveIndex;
+        w.enemies.push(e);
+      }
+      w.fx.banner?.(wave.banner ?? `WAVE ${w.waveIndex + 1}/${waves.length} — HOLD`);
+      w.fx.alarm?.();
+      w.waveState = 'active';
+      saveCheckpoint(w);
+    }
+    return;
+  }
+  // active: a wave is repelled once none of its members are still a live threat
+  const stillFighting = w.enemies.some((e) => e.waveTag === w.waveIndex
+    && e.hp > 0 && e.state !== 'DOWNED' && e.state !== 'CUFFED' && e.state !== 'DEAD');
+  if (stillFighting) return;
+  if (w.waveIndex >= waves.length - 1) {
+    w.wavesCleared = true;
+    objEvent(w, { type: 'survived' });
+    w.fx.banner?.('THE LINE HOLDS');
+  } else {
+    w.waveState = 'pending';
+    w.waveTimer = waves[w.waveIndex + 1].delay ?? 3;
+    w.fx.log?.(`Wave ${w.waveIndex + 1} repelled — brace for the next`);
+  }
 }
 
 function onVehicleDisabled(w, v, byPlayer) {
