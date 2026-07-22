@@ -89,10 +89,17 @@ export function createWorld(mission, opts) {
   });
 
   w.stats.civiliansTotal += mission.civilianBaseline ?? 0;
+  // Interdiction: the convoy and its screen charge WEST at the player's line
+  // (spawned facing west); everything else travels east as normal.
+  const convoyWest = mission.convoyGoal === 'interdict';
   for (const vd of mission.vehicles ?? []) {
-    w.vehicles.push(makeVehicle(vd.type, vd.x * TILE, vd.y * TILE + TILE / 2, {
+    const rolls = vd.ai === 'convoy' || vd.ai === 'escort';
+    const v = makeVehicle(vd.type, vd.x * TILE, vd.y * TILE + TILE / 2, {
       tag: vd.tag, ai: vd.ai, laneY: vd.y * TILE + TILE / 2, cruise: vd.cruise ?? 0,
-    }));
+      angle: convoyWest && rolls ? Math.PI : 0,
+    });
+    v.travelDir = convoyWest && rolls ? -1 : 1;
+    w.vehicles.push(v);
   }
   if (mission.playerVehicle) {
     const pv = makeVehicle(mission.playerVehicle.type, mission.playerVehicle.x * TILE, mission.playerVehicle.y * TILE + TILE / 2);
@@ -329,18 +336,24 @@ export function updateWorld(w, dt, controlsBySlot) {
   // pursuit ('stop'): the shipment escaping ends the run in failure;
   // escort ('protect'): the van arriving is the delivery objective.
   const truck = w.vehicles.find((v) => v.tag === 'truck');
-  if (truck && !truck.disabled && truck.x > w.cols * TILE - 90) {
-    if (w.mission.convoyGoal === 'protect') {
-      if (!w.delivered) {
-        w.delivered = true;
-        truck.ai = null; truck.speed = 0;
-        objEvent(w, { type: 'reached', tag: 'delivered' });
-        w.fx.banner?.('EVIDENCE DELIVERED');
-        saveCheckpoint(w);
+  if (truck && !truck.disabled) {
+    const goal = w.mission.convoyGoal;
+    if (goal === 'interdict') {
+      // it charges the player's west line; breaking through is failure
+      if (truck.x < 90) { w.fx.banner?.('THE CONVOY BROKE THROUGH'); endMission(w, 'failed'); }
+    } else if (truck.x > w.cols * TILE - 90) {
+      if (goal === 'protect') {
+        if (!w.delivered) {
+          w.delivered = true;
+          truck.ai = null; truck.speed = 0;
+          objEvent(w, { type: 'reached', tag: 'delivered' });
+          w.fx.banner?.('EVIDENCE DELIVERED');
+          saveCheckpoint(w);
+        }
+      } else { // pursue / default: the shipment reaching the interchange = failure
+        w.fx.banner?.('THE SHIPMENT GOT AWAY');
+        endMission(w, 'failed');
       }
-    } else {
-      w.fx.banner?.('THE SHIPMENT GOT AWAY');
-      endMission(w, 'failed');
     }
   }
   w.effects = w.effects.filter((f) => (f.t += dt) < f.dur);
@@ -350,7 +363,9 @@ export function updateWorld(w, dt, controlsBySlot) {
     pr.fuse -= dt;
     if (pr.fuse <= 0) explodeProp(w, pr);
   }
-  w.props = w.props.filter((pr) => pr.hp > 0 || pr.fuse != null);
+  // spike strips are permanent hazards (no hp, no fuse) — keep them; only
+  // destructible cover (hp) and armed vats (fuse) are cullable.
+  w.props = w.props.filter((pr) => pr.hp > 0 || pr.fuse != null || pr.spikes);
 
   // Escalation event
   const clearObj = w.objectives.find((o) => o.id === 'clear');
@@ -360,16 +375,22 @@ export function updateWorld(w, dt, controlsBySlot) {
   // never engages the screen must still meet the ambush, or the primary boss
   // objective can soft-lock.
   const escByCrew = esc && esc.at != null && clearObj && clearObj.progress >= esc.at;
-  const escByRoute = esc && esc.atVanFrac != null && truck && !truck.disabled
-    && truck.x > w.cols * TILE * esc.atVanFrac;
+  // fraction of the map the truck has covered toward its goal edge, whichever
+  // direction it drives, so route escalation fires for pursuit and interdiction
+  const truckFrac = truck ? (truck.travelDir < 0 ? 1 - truck.x / (w.cols * TILE) : truck.x / (w.cols * TILE)) : 0;
+  const escByRoute = esc && esc.atVanFrac != null && truck && !truck.disabled && truckFrac > esc.atVanFrac;
   if (esc && !w.escalated && (escByCrew || escByRoute)) {
     w.escalated = true;
     for (const s of esc.spawns) w.enemies.push(alertEnemy(makeEnemy(s.type, s.x * TILE + TILE / 2, s.y * TILE + TILE / 2, w)));
+    const convoyWest = w.mission.convoyGoal === 'interdict';
     for (const vd of esc.vehicles ?? []) {
-      // reinforcement vehicles enter the pursuit from behind the player
+      // reinforcements enter from behind the threat: west of the player for a
+      // pursuit, east of the player (the convoy's side) for an interdiction
       const px = w.players[0]?.x ?? vd.x * TILE;
       const laneY = vd.y * TILE + TILE / 2;
-      const v = makeVehicle(vd.type, Math.max(90, px - 560), laneY, { tag: vd.tag, ai: vd.ai, laneY, cruise: vd.cruise ?? 220 });
+      const spawnX = convoyWest ? Math.min(w.cols * TILE - 90, px + 560) : Math.max(90, px - 560);
+      const v = makeVehicle(vd.type, spawnX, laneY, { tag: vd.tag, ai: vd.ai, laneY, cruise: vd.cruise ?? 220, angle: convoyWest ? Math.PI : 0 });
+      v.travelDir = convoyWest ? -1 : 1;
       v.speed = v.cruise * 0.9;
       w.vehicles.push(v);
     }
@@ -1103,14 +1124,19 @@ function updateVehicles(w, dt) {
     if (!v.disabled && v.ai) {
       const steerToLane = clamp((v.laneY - v.y) * 0.02, -0.8, 0.8);
       const facingEast = Math.cos(v.angle) >= 0;
+      // Convoys and their screen travel a set heading — east by default, west
+      // for an interdiction run driving at the player's line. Steer corrects
+      // toward that heading instead of hardcoding east.
+      const targetAngle = v.travelDir < 0 ? Math.PI : 0;
+      const headErr = (lim) => clamp(angleDiff(v.angle, targetAngle), -lim, lim);
       if (v.ai === 'convoy') {
-        c = { throttle: v.speed < v.cruise ? 0.8 : 0, steer: steerToLane - clamp(v.angle, -0.6, 0.6) * 0.8, handbrake: false };
+        c = { throttle: v.speed < v.cruise ? 0.8 : 0, steer: steerToLane - headErr(0.6) * 0.8, handbrake: false };
       } else if (v.ai === 'escort') {
         // shield the truck; sideswipe the interceptor when it closes in
         let targetY = v.laneY;
         if (pv && Math.abs(pv.x - v.x) < 320) targetY = pv.y;
         else if (truck) targetY = truck.laneY + (v.id % 2 ? 60 : -60);
-        c = { throttle: v.speed < v.cruise * 1.15 ? 0.9 : 0, steer: clamp((targetY - v.y) * 0.02, -1, 1) - clamp(v.angle, -0.7, 0.7), handbrake: false };
+        c = { throttle: v.speed < v.cruise * 1.15 ? 0.9 : 0, steer: clamp((targetY - v.y) * 0.02, -1, 1) - headErr(0.7), handbrake: false };
         // drive-by fire: raiders in an escort mission gun for the van,
         // pursuit-mission escorts gun for the interceptor
         const quarry = (w.mission.convoyGoal === 'protect' && truck && !truck.disabled) ? truck : pv;

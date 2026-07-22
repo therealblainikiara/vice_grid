@@ -221,12 +221,15 @@ MISSIONS.m03 = {
   id: 'm03',
   title: 'M03 — HIGHWAY GLOW RUN',
   parSec: 300,
+  // PURSUIT: the hauler is running for the interchange. You start behind it and
+  // must run it down before it escapes east; escorts pace ahead to block you.
+  convoyGoal: 'pursue',
   playerVehicle: { type: 'patrol', x: 4, y: 12 },
   vehicles: [
     { type: 'gangcar', x: 22, y: 9,  tag: 'escort', ai: 'escort', cruise: 250 },
     { type: 'gangcar', x: 26, y: 11, tag: 'escort', ai: 'escort', cruise: 250 },
     { type: 'gangcar', x: 30, y: 10, tag: 'escort', ai: 'escort', cruise: 250 },
-    { type: 'truck',   x: 34, y: 10, tag: 'truck',  ai: 'convoy', cruise: 175 },
+    { type: 'truck',   x: 34, y: 10, tag: 'truck',  ai: 'convoy', cruise: 215 },
   ],
   traffic: { rows: [3, 5, 9, 11], eastRows: [9, 11], rate: 2.2, max: 7 },
   civilianBaseline: 10,
@@ -248,8 +251,8 @@ MISSIONS.m03 = {
   },
   debriefLose: { speaker: 'DISPATCH', lines: ['The expressway ate the pursuit. Rewind it and drive cleaner.'] },
   objectives: [
-    { id: 'clear', label: 'Disable the escort runners', primary: true, type: 'neutralize', count: 3, tag: 'escort' },
-    { id: 'boss', label: 'Stop the hauler and take down TREAD', primary: true, type: 'boss' },
+    { id: 'clear', label: 'Run down the escort runners', primary: true, type: 'neutralize', count: 3, tag: 'escort' },
+    { id: 'boss', label: 'Force the hauler to stop — take down TREAD', primary: true, type: 'boss' },
     { id: 'cuffs', label: 'Optional: Arrest 2 suspects', primary: false, type: 'arrest', count: 2 },
     { id: 'civs', label: 'Optional: Keep commuters out of it (1 strike allowed)', primary: false, type: 'protect', count: 1 },
     { id: 'gate', label: 'Optional: Catch the convoy before the interchange', primary: false, type: 'reach', tag: 'gate' },
@@ -496,13 +499,17 @@ MISSIONS.m07 = {
   id: 'm07',
   title: 'M07 — CONVOY TAKEDOWN',
   parSec: 330,
-  playerVehicle: { type: 'patrol', x: 5, y: 10 },
+  // INTERDICTION: an armoured convoy charges your roadblock from the east. Dig
+  // in at the western chokepoint, lay the strips, peel the screen, and stop the
+  // hauler before it breaks through to the west limits.
+  convoyGoal: 'interdict',
+  playerVehicle: { type: 'patrol', x: 16, y: 10 },
   vehicles: [
-    { type: 'gangcar',  x: 26, y: 8,  tag: 'escort', ai: 'escort', cruise: 265 },
-    { type: 'gangcar',  x: 30, y: 11, tag: 'escort', ai: 'escort', cruise: 265 },
-    { type: 'gangbike', x: 34, y: 9,  tag: 'escort', ai: 'escort', cruise: 330 },
-    { type: 'gangbike', x: 34, y: 12, tag: 'escort', ai: 'escort', cruise: 330 },
-    { type: 'armoured', x: 40, y: 10, tag: 'truck',  ai: 'convoy', cruise: 165 },
+    { type: 'gangcar',  x: 50, y: 8,  tag: 'escort', ai: 'escort', cruise: 265 },
+    { type: 'gangcar',  x: 54, y: 11, tag: 'escort', ai: 'escort', cruise: 265 },
+    { type: 'gangbike', x: 58, y: 9,  tag: 'escort', ai: 'escort', cruise: 330 },
+    { type: 'gangbike', x: 58, y: 12, tag: 'escort', ai: 'escort', cruise: 330 },
+    { type: 'armoured', x: 64, y: 10, tag: 'truck',  ai: 'convoy', cruise: 165 },
   ],
   traffic: { rows: [3, 5], eastRows: [], rate: 3.0, max: 4 },
   briefing: {
@@ -510,24 +517,24 @@ MISSIONS.m07 = {
     lines: [
       'The tower block gave up a schedule: Glowline moves the week\'s cut down Vermillion Boulevard tonight, and they have stopped pretending to be a street gang.',
       'That is an armoured transport — Halcyon surplus, sold to dealers with the serial numbers still on it. Your pistol will not open it. Your bumper might.',
-      'Runners and bikes will screen it. Peel them off, then bully the transport to a stop.',
+      'You will not catch that thing in a straight race, so we do not race — we block. Set up at the west chokepoint and lay the strips.',
+      'Peel the runners and bikes off it as they charge, then cripple the transport before it breaks your line.',
       'The commander rides in the cab. They call him LOCKJAW, and he has never once let go of anything.',
     ],
   },
   debriefWin: {
     speaker: 'DISPATCH',
     lines: [
-      'Transport stopped, cut seized, LOCKJAW off the board. That armour was invoiced to a Halcyon Wellness subsidiary, Grid.',
+      'The line held. Transport stopped cold, cut seized, LOCKJAW off the board. That armour was invoiced to a Halcyon Wellness subsidiary, Grid.',
       'The invoice lists a delivery address: an industrial kitchen under the old cannery. That is where they cook it.',
     ],
   },
-  debriefLose: { speaker: 'DISPATCH', lines: ['The transport made the limits and the cut is gone. Run it back.'] },
+  debriefLose: { speaker: 'DISPATCH', lines: ['The transport broke the line and the cut is gone. Set up tighter and run it back.'] },
   objectives: [
-    { id: 'clear', label: 'Peel off the convoy screen', primary: true, type: 'neutralize', count: 4, tag: 'escort' },
-    { id: 'boss', label: 'Stop the transport and take down LOCKJAW', primary: true, type: 'boss' },
+    { id: 'clear', label: 'Break the convoy screen as it charges', primary: true, type: 'neutralize', count: 4, tag: 'escort' },
+    { id: 'boss', label: 'Cripple the transport — take down LOCKJAW', primary: true, type: 'boss' },
     { id: 'cuffs', label: 'Optional: Arrest 2 suspects', primary: false, type: 'arrest', count: 2 },
     { id: 'civs', label: 'Optional: Keep the boulevard clear of casualties', primary: false, type: 'protect', count: 1 },
-    { id: 'gate', label: 'Optional: Break the convoy before the river bridge', primary: false, type: 'reach', tag: 'gate' },
   ],
   escalation: {
     at: 2,
@@ -539,7 +546,7 @@ MISSIONS.m07 = {
     ],
   },
   boss: {
-    type: 'lockjaw', x: 100, y: 10, trigger: 'truck', name: 'LOCKJAW',
+    type: 'lockjaw', x: 20, y: 10, trigger: 'truck', name: 'LOCKJAW',
     intro: 'LOCKJAW: "Eleven years I never lost a load. You get to be the first thing I break instead."',
     phase2At: 0.5, phase2Banner: 'LOCKJAW DROPS THE PLATE ARMOUR',
     phase2Spawns: [],
@@ -553,9 +560,9 @@ MISSIONS.m07 = {
     rowFill(10, '~'); rowFill(11, '~'); rowFill(12, '~');
     rowFill(13, ','); rowFill(14, ',');
     for (let x = 8; x < 130; x += 16) set(x, 6, '~');     // median gaps
-    set(5, 10, 'P');
-    set(104, 10, 'X');                                    // river bridge gate
-    for (let x = 12; x < 130; x += 27) { set(x, 1, 'c'); set(x + 3, 14, 'c'); }
+    set(16, 10, 'P');                                     // player digs in west
+    for (let y = 7; y <= 12; y++) { set(26, y, '^'); set(27, y, '^'); } // roadblock strips
+    for (let x = 40; x < 130; x += 27) { set(x, 1, 'c'); set(x + 3, 14, 'c'); }
   }),
 };
 
