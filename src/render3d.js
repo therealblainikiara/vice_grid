@@ -671,44 +671,72 @@ function buildStatic(w) {
   for (let ty = 0; ty < w.rows; ty++) {
     for (let tx = 0; tx < w.cols; tx++) if (w.walls.has(tx + ',' + ty)) wallTiles.push([tx, ty]);
   }
-  // three texture variants, one InstancedMesh each: a whole scene in 3 draw calls
   const theme = envFor(w.mission);
   const wallMats = getWallMaterials(theme.wall);
-  const buckets = [[], [], []];
-  for (const t of wallTiles) buckets[(hash(t[0], t[1], 42) * 3) | 0].push(t);
+  const isWall = (tx, ty) => w.walls.has(tx + ',' + ty);
   const m4 = new THREE.Matrix4();
   const colr = new THREE.Color();
+  const tintFor = (tx, ty) => (theme.wall === 'container'
+    ? colr.setStyle(CONTAINER_COLORS[(hash(tx, ty, 33) * CONTAINER_COLORS.length) | 0]).multiplyScalar(0.75 + hash(tx, ty, 31) * 0.35)
+    : colr.setStyle(theme.tint).multiplyScalar(theme.outdoor ? 0.62 + hash(tx, ty, 31) * 0.55 : 0.82 + hash(tx, ty, 31) * 0.22));
+
+  // City façades and the building's outer shell stay SOLID (they are buildings /
+  // exterior walls). Interior partitions in an indoor level render as THIN
+  // run-aware bars so a floor reads like real architecture, not fat blocks.
+  const thick = [], thin = [];
+  for (const [tx, ty] of wallTiles) {
+    const border = tx === 0 || ty === 0 || tx === w.cols - 1 || ty === w.rows - 1;
+    (theme.wall === 'facade' || border ? thick : thin).push([tx, ty]);
+  }
+
+  // solid walls: one InstancedMesh per texture variant
+  const buckets = [[], [], []];
+  for (const t of thick) buckets[(hash(t[0], t[1], 42) * 3) | 0].push(t);
   buckets.forEach((tiles, v) => {
     if (!tiles.length) return;
     const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, WALL_H, TILE), wallMats[v], tiles.length);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    mesh.castShadow = true; mesh.receiveShadow = true;
     tiles.forEach(([tx, ty], i) => {
-      // city façades vary height so a wall run reads as a row of buildings, not
-      // a fence; interiors are uniform partitions with a taller border shell
-      let hVar;
-      if (theme.wall === 'facade') {
-        hVar = 1 + hash(tx, ty, 30) * 0.6;
-      } else {
-        const border = tx === 0 || ty === 0 || tx === w.cols - 1 || ty === w.rows - 1;
-        hVar = theme.hMul * (border ? 1.5 : 1) + hash(tx, ty, 30) * theme.vary;
-      }
+      // city façades vary height so a run reads as a row of buildings; the outer
+      // shell of an interior is a touch taller than its partitions
+      const border = tx === 0 || ty === 0 || tx === w.cols - 1 || ty === w.rows - 1;
+      const hVar = theme.wall === 'facade'
+        ? 1 + hash(tx, ty, 30) * 0.6
+        : theme.hMul * (border ? 1.5 : 1) + hash(tx, ty, 30) * theme.vary;
       m4.makeScale(1, hVar, 1);
       m4.setPosition(tx * TILE + TILE / 2, (WALL_H * hVar) / 2, ty * TILE + TILE / 2);
       mesh.setMatrixAt(i, m4);
-      if (theme.wall === 'container') {
-        colr.setStyle(CONTAINER_COLORS[(hash(tx, ty, 33) * CONTAINER_COLORS.length) | 0])
-          .multiplyScalar(0.75 + hash(tx, ty, 31) * 0.35);
-      } else {
-        colr.setStyle(theme.tint).multiplyScalar(
-          theme.outdoor ? 0.62 + hash(tx, ty, 31) * 0.55 : 0.82 + hash(tx, ty, 31) * 0.22);
-      }
-      mesh.setColorAt(i, colr);
+      mesh.setColorAt(i, tintFor(tx, ty));
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     R.statics.add(mesh);
   });
+
+  // thin partitions: a horizontal bar for tiles in an E/W run, a vertical bar for
+  // an N/S run — a corner tile gets both, forming a clean L with no fat block.
+  if (thin.length) {
+    const THIN = TILE * 0.17;
+    const pH = WALL_H * theme.hMul + 6;
+    const horiz = thin.filter(([tx, ty]) => isWall(tx - 1, ty) || isWall(tx + 1, ty) || (!isWall(tx, ty - 1) && !isWall(tx, ty + 1)));
+    const vert = thin.filter(([tx, ty]) => isWall(tx, ty - 1) || isWall(tx, ty + 1));
+    const bars = (list, geo) => {
+      if (!list.length) return;
+      const mesh = new THREE.InstancedMesh(geo, wallMats[0], list.length);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      list.forEach(([tx, ty], i) => {
+        m4.makeScale(1, 1, 1);
+        m4.setPosition(tx * TILE + TILE / 2, pH / 2, ty * TILE + TILE / 2);
+        mesh.setMatrixAt(i, m4);
+        mesh.setColorAt(i, tintFor(tx, ty));
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      R.statics.add(mesh);
+    };
+    bars(horiz, new THREE.BoxGeometry(TILE, pH, THIN));
+    bars(vert, new THREE.BoxGeometry(THIN, pH, TILE));
+  }
 
   if (theme.signs) {
     const signSet = SIGN_SETS[w.mission.signage] ?? SIGN_SETS.street;
