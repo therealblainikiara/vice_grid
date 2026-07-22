@@ -906,7 +906,7 @@ function setRingProgress(tag, frac) {
 
 // `inRange` is computed against the same radius world.js uses for cuffing, so
 // the prompt is a promise the sim actually keeps.
-function syncHumanoid(g, tag, e, settings, inRange, intel) {
+function syncHumanoid(g, tag, e, settings, inRange, intel, highlight = false) {
   const u = g.userData;
   const dead = e.state === 'DEAD';
   const downed = e.state === 'DOWNED' || e.downed;
@@ -939,7 +939,11 @@ function syncHumanoid(g, tag, e, settings, inRange, intel) {
     u.legL.position.y = 8 + Math.abs(Math.cos(phase)) * 1.4;
     u.legR.position.y = 8 + Math.abs(Math.sin(phase)) * 1.4;
   }
-  u.accent.emissiveIntensity = e.hitFlash > 0 && !settings.reducedFlash ? 6 : (u.baseEmissive ?? 0.4);
+  // hit flash wins; else Intelligence L2 aim-highlight glow (not while folded); else base
+  const base = u.baseEmissive ?? 0.4;
+  const canHighlight = highlight && !dead && !downed && !cuffed;
+  u.accent.emissiveIntensity = e.hitFlash > 0 && !settings.reducedFlash
+    ? 6 : (canHighlight ? 3 : base);
 
   // ---- tags: position only, never rotation (see makeTagGroup)
   const t = tag.userData;
@@ -1320,6 +1324,7 @@ export function draw3d(canvas, w, settings) {
   syncNeon(w, dark ? fx * 0.15 : fx);
   syncZones(w, now);
   syncCompass(w, now);
+  syncDeepScan(w, now);
 
   // damage vignette (CSS overlay: a WebGL canvas cannot be painted over)
   if (R.hurtEl === undefined) R.hurtEl = document.getElementById('hurt');
@@ -1379,6 +1384,15 @@ function interactableBy(w, e) {
     && Math.hypot(p.x - e.x, p.y - e.y) < r);
 }
 
+// Intelligence L2: is any aiming player pointed at this enemy? Mirrors the
+// `aimedAt` test in world.js (p.aiming + <0.25 rad off aim); angleTo/TAU aren't
+// in scope here so the wrap maths is inlined.
+function aimedAtBody(w, e) {
+  const TAU = Math.PI * 2;
+  return w.players.some((p) => p.aiming
+    && Math.abs(((Math.atan2(e.y - p.y, e.x - p.x) - p.aimAngle + Math.PI) % TAU) - Math.PI) < 0.25);
+}
+
 function syncBodies(w, settings) {
   const intel = w.settings?.upgrades?.intelligence ?? 0;
   const seen = new Set();
@@ -1392,7 +1406,9 @@ function syncBodies(w, settings) {
       rec = { rig, tag };
       R.bodies.set(e.id, rec);
     }
-    syncHumanoid(rec.rig, rec.tag, e, settings, interactableBy(w, e), intel);
+    // Intelligence L2: highlight suspects the player is aiming at (gated < L2)
+    const highlight = intel >= 2 && e.kind === 'enemy' && aimedAtBody(w, e);
+    syncHumanoid(rec.rig, rec.tag, e, settings, interactableBy(w, e), intel, highlight);
   }
   for (const [id, rec] of R.bodies) {
     if (seen.has(id)) continue;
@@ -1675,6 +1691,48 @@ function syncCompass(w, now) {
   R.compass.position.set(p.x + Math.cos(a) * 40, 40, p.y + Math.sin(a) * 40);
   R.compass.rotation.set(Math.PI / 2, 0, -a - Math.PI / 2);
   R.compass.material.opacity = 0.5 + 0.4 * Math.sin(now / 240);
+}
+
+// Intelligence Lv4 deep scan: through-wall markers over every un-taken evidence
+// pickup (yellow) plus a blip over every living, un-cuffed enemy (red). These sit
+// at depthTest:false / high renderOrder so they read through walls — the genuinely
+// new capability the pickup beacons (wall-occluded) don't already give. Marker
+// meshes are pooled on R.deepScan and reused; only visibility toggles per frame.
+function syncDeepScan(w, now) {
+  if (!R.deepScan) R.deepScan = { evidence: [], enemy: [] };
+  const ds = R.deepScan;
+  const on = (w.settings?.upgrades?.intelligence ?? 0) >= 4;
+  const grow = (pool, n, colour) => {
+    while (pool.length < n) {
+      const m = new THREE.Mesh(
+        new THREE.OctahedronGeometry(7),
+        new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.9, depthTest: false }),
+      );
+      m.renderOrder = 998;
+      R.scene.add(m);
+      pool.push(m);
+    }
+  };
+  const place = (pool, items, y) => {
+    items.forEach((it, i) => {
+      const m = pool[i];
+      m.visible = true;
+      m.position.set(it.x, y + Math.sin(now / 300 + i) * 3, it.y);
+      m.rotation.y = now / 600 + i;
+    });
+    for (let i = items.length; i < pool.length; i++) pool[i].visible = false;
+  };
+  if (!on) {
+    for (const m of ds.evidence) m.visible = false;
+    for (const m of ds.enemy) m.visible = false;
+    return;
+  }
+  const evPk = w.pickups.filter((pk) => pk.kind === 'evidence');
+  const foes = w.enemies.filter((e) => e.hp > 0 && e.state !== 'CUFFED' && e.state !== 'DEAD');
+  grow(ds.evidence, evPk.length, '#ffd94f');
+  grow(ds.enemy, foes.length, '#ff5050');
+  place(ds.evidence, evPk, 100);
+  place(ds.enemy, foes, 90);
 }
 
 // Only the nearest few signs become real lights; the rest stay emissive + bloom.

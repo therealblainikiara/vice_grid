@@ -74,3 +74,25 @@ test('enforcement: cuff speed + intimidate radius at L1, auto-cuff at L3', () =>
   assert.equal(upgradeEffects({ enforcement: 2 }).autoCuff, false);
   assert.equal(upgradeEffects({ enforcement: 3 }).autoCuff, true);
 });
+
+test('enforcement: intimidate flash gate at L2, cuff flashbang gate at L4', () => {
+  // intimidate flash: off below L2
+  assert.equal(upgradeEffects({}).intimidateFlash, false);
+  assert.equal(upgradeEffects({ enforcement: 1 }).intimidateFlash, false);
+  assert.equal(upgradeEffects({ enforcement: 2 }).intimidateFlash, true);
+  // cuff flashbang: off below L4
+  assert.equal(upgradeEffects({ enforcement: 3 }).cuffFlashbang, false);
+  assert.equal(upgradeEffects({ enforcement: 4 }).cuffFlashbang, true);
+  // tuning exposed from one source for the sim to consume
+  const l4 = upgradeEffects({ enforcement: 4 });
+  assert.ok(l4.intimidateFlashFear > 0 && l4.intimidateFlashStun > 0);
+  assert.ok(l4.cuffFlashbangRadius > 0 && l4.cuffFlashbangStun > 0);
+});
+
+test('intelligence: aim-highlight gate at L2, deep-scan gate at L4', () => {
+  assert.equal(upgradeEffects({}).aimHighlight, false);
+  assert.equal(upgradeEffects({ intelligence: 1 }).aimHighlight, false);
+  assert.equal(upgradeEffects({ intelligence: 2 }).aimHighlight, true);
+  assert.equal(upgradeEffects({ intelligence: 3 }).deepScan, false);
+  assert.equal(upgradeEffects({ intelligence: 4 }).deepScan, true);
+});

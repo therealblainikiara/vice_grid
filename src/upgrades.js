@@ -44,7 +44,21 @@ export function upgradeEffects(upgrades = {}) {
     // enforcement
     cuffSpeedMul: 1 + u('enforcement') * 0.15,
     intimidateRadiusMul: u('enforcement') >= 1 ? 1.1 : 1,
+    // L2 intimidate flash: FREEZE forces an on-the-spot surrender check with a
+    // heavy fear penalty (far more suspects break) plus a brief flinch-stun.
+    intimidateFlash: u('enforcement') >= 2,
+    intimidateFlashFear: 4,   // added to the morale intimidation term (x0.08 each)
+    intimidateFlashStun: 0.5, // brief flinch so the flash reads on screen
     autoCuff: u('enforcement') >= 3,
+    // L4 cuff flashbang: completing an arrest stuns + rattles nearby threats.
+    cuffFlashbang: u('enforcement') >= 4,
+    cuffFlashbangRadius: 150,
+    cuffFlashbangStun: 1.1,
+    // intelligence
+    // L2 aim highlight: aimed-at suspects glow (render-side gate).
+    aimHighlight: u('intelligence') >= 2,
+    // L4 deep scan: through-wall markers over all evidence + enemy blips.
+    deepScan: u('intelligence') >= 4,
   };
 }
 
@@ -88,7 +102,7 @@ export const UPGRADE_DEFS = {
     desc: 'Cuffing, intimidation and non-lethal tools',
     levels: [
       '+15% cuff speed, +10% intimidate radius',
-      'Intimidate flashes nearby suspects (morale hit)',
+      'FREEZE breaks nerve: more suspects surrender on the spot',
       'Auto-cuff downed suspects in range',
       'Cuff releases a flashbang (stuns nearby)',
     ],
@@ -101,7 +115,7 @@ export const UPGRADE_DEFS = {
       'Evidence compass points to nearest pickup',
       'Suspects glow when aimed at (highlight)',
       'Read suspect nerve: see morale & surrender chance',
-      'Hack nearby turrets / cameras (hold interact)',
+      'Deep scan: reveals all evidence + enemy blips through walls',
     ],
   },
 };

@@ -608,8 +608,15 @@ function updatePlayer(w, p, dt, c) {
     for (const e of w.enemies) {
       if (e.hp <= 0 || e.state !== 'FIGHT') continue;
       const d = dist(p.x, p.y, e.x, e.y);
-      if (d < 380 * ue.intimidateRadiusMul && hasLos(w, p.x, p.y, e.x, e.y)) e.moraleTimer = Math.min(e.moraleTimer, 0.05);
+      if (d < 380 * ue.intimidateRadiusMul && hasLos(w, p.x, p.y, e.x, e.y)) {
+        e.moraleTimer = Math.min(e.moraleTimer, 0.05);
+        // Enforcement L2: force the surrender check right here (no-op below L2),
+        // so far more suspects break instead of merely re-rolling next tick.
+        intimidateFlash(w, e, ue);
+      }
     }
+    // a visible shockwave so the flash reads on screen (Enforcement L2)
+    if (ue.intimidateFlash) w.effects.push({ kind: 'blast', x: p.x, y: p.y, t: 0, dur: 0.4 });
   }
 
   // Interact: cuff > revive > pickup
@@ -710,6 +717,50 @@ function meleeSwing(w, p, def) {
 }
 
 // Shared by held-interact cuffing and the Enforcement L3 auto-cuff.
+// Enforcement L2: a FREEZE that doesn't just reset the morale clock but forces
+// an on-the-spot surrender check with a heavy fear penalty, so far more suspects
+// break than the base shout. Bosses hold; sly types can still fake it. Gated on
+// ue.intimidateFlash — a no-op below Enforcement L2. Returns the new state or
+// null. Decides directly here because morale isn't stored: a stunned enemy
+// early-returns before the periodic FIGHT check, so leaning on stunTimer to lower
+// morale would defer (or cancel) the surrender rather than cause it.
+export function intimidateFlash(w, e, ue) {
+  if (!ue?.intimidateFlash) return null;
+  if (e.boss || e.hp <= 0 || e.state !== 'FIGHT') return null;
+  const alliesDown = w.enemies.filter((x) => x.counted || x.hp <= 0 || isCuffable(x.state)).length;
+  const intimidation = Math.max(0, ...w.players.map((p) => p.agent?.intimidation ?? 0)) + ue.intimidateFlashFear;
+  const m = computeMorale(e, {
+    alliesDown, alliesTotal: Math.max(w.enemies.length, 1),
+    aimedAt: true, distToPlayer: 0, intimidation,
+  });
+  const r = decideReaction(e, m, w.rng());
+  if (r === 'fight') return null;
+  e.state = { flee: 'FLEE', surrender: 'SURRENDER', fake_surrender: 'FAKE_SURRENDER' }[r];
+  e.stateTime = 0;
+  e.stunTimer = Math.max(e.stunTimer ?? 0, ue.intimidateFlashStun);
+  if (r !== 'flee') w.fx.surrender?.(e.x, e.y);
+  return e.state;
+}
+
+// Enforcement L4: completing an arrest pops a flashbang — nearby active threats
+// (not cuffed / downed / already surrendering) get stunned and rattled, reusing
+// the same stun/morale levers FREEZE and hitEntity use. Gated on ue.cuffFlashbang
+// (no-op below Enforcement L4). Returns the number of enemies caught in the burst.
+export function cuffFlashbang(w, cx, cy, ue) {
+  if (!ue?.cuffFlashbang) return 0;
+  let caught = 0;
+  for (const e of w.enemies) {
+    if (e.hp <= 0 || e.state === 'CUFFED' || e.state === 'DOWNED' || isCuffable(e.state)) continue;
+    if (dist(cx, cy, e.x, e.y) > ue.cuffFlashbangRadius) continue;
+    e.stunTimer = Math.max(e.stunTimer ?? 0, ue.cuffFlashbangStun);
+    e.moraleTimer = Math.min(e.moraleTimer ?? 1, 0.05);
+    e.hitFlash = Math.max(e.hitFlash ?? 0, 0.12);
+    caught++;
+  }
+  w.effects.push({ kind: 'blast', x: cx, y: cy, t: 0, dur: 0.5 });
+  return caught;
+}
+
 function completeCuff(w, target) {
   target.state = 'CUFFED'; target.stateTime = 0;
   w.fx.cuff?.(target.x, target.y);
@@ -717,6 +768,8 @@ function completeCuff(w, target) {
   neutralize(w, target, 'arrested');
   const found = searchSuspect(target, w.rng());
   if (found.found === 'intel') { w.stats.intel = (w.stats.intel ?? 0) + 1; w.fx.log?.('Intel recovered: evidence marked on the grid'); }
+  // Enforcement L4: flashbang burst on arrest (no-op below L4)
+  cuffFlashbang(w, target.x, target.y, upgradeEffects(w.settings?.upgrades));
   saveCheckpoint(w);
 }
 
