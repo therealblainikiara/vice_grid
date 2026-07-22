@@ -592,6 +592,7 @@ function aimPlayer(w, p, c) {
 
 function firePlayer(w, p, c, { fromVehicle }) {
   const upgrades = w.settings?.upgrades ?? {};
+  const ue = upgradeEffects(upgrades);
   const ws = p.weapons[p.weaponIdx];
   const def = WEAPONS[ws.key];
 
@@ -600,28 +601,35 @@ function firePlayer(w, p, c, { fromVehicle }) {
 
   if (c.fire && !def.melee && canFire(ws)) {
     fire(ws);
-    const ue = upgradeEffects(upgrades);
-    ws.cooldown /= ue.fireRateMul; // Weapons L2: +12% fire rate
-    w.stats.shotsFired += def.pellets ?? 1;
+    // Weapons L3: aiming while firing swaps to a single heavy slug shot.
+    const slug = ue.altFire && !!c.aim && !def.melee;
+    ws.cooldown /= ue.fireRateMul;          // Weapons L2: +12% fire rate
+    if (slug) ws.cooldown *= ue.slugCooldownMul; // L3: heavier weapon, slower to re-fire
+    const pellets = slug ? 1 : (def.pellets ?? 1);
+    w.stats.shotsFired += pellets;
     const muzzleR = fromVehicle ? fromVehicle.r + 14 : R + 6;
-    const spread = effectiveSpread(def, {
+    let spread = effectiveSpread(def, {
       moving: p.moving || (!!fromVehicle && Math.abs(fromVehicle.speed) > 60),
       stability: p.agent.stability + ue.stabilityBonus,
     });
-    for (let i = 0; i < (def.pellets ?? 1); i++) {
+    if (slug) spread *= ue.slugSpreadMul;   // L3: tighter grouping
+    for (let i = 0; i < pellets; i++) {
       const a = p.aimAngle + (w.rng() - 0.5) * 2 * spread;
       w.bullets.push({
         x: p.x + Math.cos(a) * muzzleR, y: p.y + Math.sin(a) * muzzleR,
         vx: Math.cos(a) * def.speed, vy: Math.sin(a) * def.speed,
         weaponKey: ws.key, lethal: def.lethal, stun: def.stun ?? 0,
-        dmgBase: def.damage * (1 + (upgrades.weapons ?? 0) * 0.08),
+        dmgBase: def.damage * ue.damageMul * (slug ? ue.slugDamageMul : 1),
         ox: p.x, oy: p.y, fromPlayer: true, life: def.range / def.speed,
-        knockback: def.knockback, ignoreVehicleId: fromVehicle?.id ?? null,
+        knockback: def.knockback * (slug ? ue.slugKnockbackMul : 1),
+        incendiary: ue.incendiary, slug, // L4 burn tag / L3 heavy-shot visual
+        ignoreVehicleId: fromVehicle?.id ?? null,
       });
     }
     w.fx.shot?.(ws.key, p.x, p.y);
-    w.cam.shake = Math.min(1, w.cam.shake + 0.15 * (w.settings?.screenShake ?? 1));
-    w.effects.push({ kind: 'muzzle', x: p.x + Math.cos(p.aimAngle) * (muzzleR + 4), y: p.y + Math.sin(p.aimAngle) * (muzzleR + 4), a: p.aimAngle, t: 0, dur: 0.06 });
+    // Slug is a visibly bigger event: heavier shake and a fatter muzzle flash.
+    w.cam.shake = Math.min(1, w.cam.shake + (slug ? 0.35 : 0.15) * (w.settings?.screenShake ?? 1));
+    w.effects.push({ kind: 'muzzle', x: p.x + Math.cos(p.aimAngle) * (muzzleR + 4), y: p.y + Math.sin(p.aimAngle) * (muzzleR + 4), a: p.aimAngle, t: 0, dur: slug ? 0.12 : 0.06, slug });
   } else if (c.fire && def.melee && canFire(ws) && !fromVehicle) {
     fire(ws);
     meleeSwing(w, p, def);
@@ -725,6 +733,21 @@ function handleInteract(w, p, dt, c) {
 
 function enemyLabel(e) { return e.boss ? e.name : 'SUSPECT'; }
 
+// Weapons L4 incendiary burn: ticks damage-over-time on a struck enemy. Batched
+// on a 0.25s accumulator to keep effect spam down, and routed through hitEntity
+// with lethal:false so it can only down (never kill) — arrests still work.
+export function tickBurn(w, e, dt) {
+  if (!(e.burnTimer > 0)) return;
+  e.burnTimer = Math.max(0, e.burnTimer - dt);
+  if (e.hp <= 0 || e.state === 'DEAD' || e.state === 'CUFFED' || e.state === 'DOWNED') return;
+  e.burnAccum = (e.burnAccum ?? 0) + dt;
+  if (e.burnAccum >= 0.25) {
+    const dmg = (e.burnDps ?? 0) * e.burnAccum;
+    e.burnAccum = 0;
+    hitEntity(w, e, dmg, { lethal: false, fromPlayer: true });
+  }
+}
+
 // --- enemy AI ---
 
 function updateEnemy(w, e, dt) {
@@ -732,6 +755,7 @@ function updateEnemy(w, e, dt) {
   e.hitFlash = Math.max(0, e.hitFlash - dt);
   e.stunTimer = Math.max(0, e.stunTimer - dt);
   tickWeapon(e.ws, dt);
+  tickBurn(w, e, dt); // Weapons L4 incendiary damage-over-time
   if (e.state === 'DEAD' || e.state === 'CUFFED' || e.state === 'DOWNED') return;
   if (e.stunTimer > 0) return;
 
@@ -1143,7 +1167,7 @@ function updateBullets(w, dt) {
         if (t.kind === 'enemy' && t.state === 'CUFFED') continue;
         if (dist(b.x, b.y, t.x, t.y) < R + 4) {
           if (b.fromPlayer) w.stats.shotsHit++;
-          hitEntity(w, t, scaledDamage(b), { lethal: b.lethal, stun: b.stun, kx: (b.vx / 900) * b.knockback, ky: (b.vy / 900) * b.knockback, fromPlayer: b.fromPlayer });
+          hitEntity(w, t, scaledDamage(b), { lethal: b.lethal, stun: b.stun, kx: (b.vx / 900) * b.knockback, ky: (b.vy / 900) * b.knockback, fromPlayer: b.fromPlayer, incendiary: b.incendiary });
           b.life = 0;
           break;
         }
@@ -1158,7 +1182,7 @@ function updateBullets(w, dt) {
   }
 }
 
-function hitEntity(w, t, dmg, { lethal, stun = 0, kx = 0, ky = 0, fromPlayer }) {
+function hitEntity(w, t, dmg, { lethal, stun = 0, kx = 0, ky = 0, fromPlayer, incendiary = false }) {
   if (dmg <= 0) return;
   if (t.kind === 'player') {
     // Armour L2 damage reduction / L3 knockback resistance; regen clock resets
@@ -1213,6 +1237,12 @@ function hitEntity(w, t, dmg, { lethal, stun = 0, kx = 0, ky = 0, fromPlayer }) 
   }
 
   // enemy
+  // Weapons L4: incendiary rounds set suspects (never civilians) on fire.
+  if (incendiary && t.hp > 0) {
+    const eff = upgradeEffects(w.settings?.upgrades);
+    t.burnTimer = Math.max(t.burnTimer ?? 0, eff.burnDuration);
+    t.burnDps = eff.burnDps;
+  }
   const surrenderedBefore = isCuffable(t.state);
   const ev = applyDamage(t, dmg, { lethal, stun });
   if (surrenderedBefore && lethal && fromPlayer) {

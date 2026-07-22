@@ -4,6 +4,36 @@ import {
   WEAPONS, damageAtDistance, effectiveSpread, applyDamage,
   makeWeaponState, canFire, fire, startReload, tickWeapon, blastDamage,
 } from '../src/combat.js';
+import { tickBurn } from '../src/world.js';
+
+// Minimal fake world for tickBurn: it routes burn through hitEntity, which for a
+// still-alive enemy only touches these fields (no down/neutralize path fires as
+// long as the enemy keeps positive HP).
+const burnWorld = () => ({ cols: 100, rows: 100, walls: new Set(), props: [], effects: [], fx: {}, settings: {} });
+const burnEnemy = (over = {}) => ({
+  kind: 'enemy', hp: 100, maxHp: 100, armor: 0, state: 'FIGHT',
+  x: 500, y: 500, hitFlash: 0, burnTimer: 2.5, burnDps: 6, ...over,
+});
+
+test('incendiary burn ticks damage over time and reduces enemy HP', () => {
+  const w = burnWorld();
+  const e = burnEnemy();
+  const before = e.hp;
+  for (let i = 0; i < 10; i++) tickBurn(w, e, 0.25); // 2.5s of burn
+  assert.ok(e.hp < before, 'burn should reduce HP');
+  assert.ok(e.hp > 0, 'burn is non-lethal-safe: does not kill outright');
+  assert.ok(before - e.hp >= 12, 'roughly 6 dmg/s over 2.5s (~15)');
+  assert.equal(e.burnTimer, 0, 'burn expires after its duration');
+});
+
+test('burn stops dealing damage once its timer runs out', () => {
+  const w = burnWorld();
+  const e = burnEnemy();
+  for (let i = 0; i < 10; i++) tickBurn(w, e, 0.25);
+  const settled = e.hp;
+  for (let i = 0; i < 10; i++) tickBurn(w, e, 0.25); // no burn left
+  assert.equal(e.hp, settled, 'no further damage after burn expires');
+});
 
 test('damage is full inside falloff range', () => {
   assert.equal(damageAtDistance(WEAPONS.pistol, 100), WEAPONS.pistol.damage);

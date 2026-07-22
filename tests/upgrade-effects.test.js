@@ -31,6 +31,22 @@ test('weapons: damage per level, fire rate + recoil from L2', () => {
   assert.ok(l2.stabilityBonus > upgradeEffects({ weapons: 1 }).stabilityBonus + 0.03); // extra recoil control kicks in
 });
 
+test('weapons: alt-fire gate at L3, incendiary gate at L4', () => {
+  // gates are off below their level
+  assert.equal(upgradeEffects({ weapons: 2 }).altFire, false);
+  assert.equal(upgradeEffects({ weapons: 3 }).altFire, true);
+  assert.equal(upgradeEffects({ weapons: 3 }).incendiary, false);
+  assert.equal(upgradeEffects({ weapons: 4 }).incendiary, true);
+  // both gates neutral on an empty build
+  assert.equal(upgradeEffects({}).altFire, false);
+  assert.equal(upgradeEffects({}).incendiary, false);
+  // slug + burn tuning is exposed for the sim to consume from one source
+  const l4 = upgradeEffects({ weapons: 4 });
+  assert.ok(l4.slugDamageMul > 1 && l4.slugKnockbackMul > 1 && l4.slugCooldownMul > 1);
+  assert.ok(l4.slugSpreadMul < 1);
+  assert.ok(l4.burnDps > 0 && l4.burnDuration > 0);
+});
+
 test('armour: +15 HP per level, DR at L2, knockback resist at L3, regen at L4', () => {
   assert.equal(upgradeEffects({ armor: 1 }).maxHpBonus, 15);
   assert.equal(upgradeEffects({ armor: 1 }).damageTakenMul, 1);

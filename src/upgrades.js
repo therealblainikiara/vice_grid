@@ -10,6 +10,16 @@ export function upgradeEffects(upgrades = {}) {
     damageMul: 1 + u('weapons') * 0.08,
     stabilityBonus: u('weapons') * 0.03 + (u('weapons') >= 2 ? 0.05 : 0),
     fireRateMul: u('weapons') >= 2 ? 1.12 : 1,
+    // L3 alt-fire: aim + fire launches a single heavy slug instead of a normal shot
+    altFire: u('weapons') >= 3,
+    slugDamageMul: 1.8,
+    slugKnockbackMul: 2.2,
+    slugCooldownMul: 1.7,
+    slugSpreadMul: 0.35, // tighter than a normal shot
+    // L4 incendiary ammo: hits set suspects on fire (damage-over-time)
+    incendiary: u('weapons') >= 4,
+    burnDps: 6,
+    burnDuration: 2.5,
     // armour
     maxHpBonus: u('armor') * 15,
     damageTakenMul: u('armor') >= 2 ? 0.9 : 1,
@@ -35,8 +45,8 @@ export const UPGRADE_DEFS = {
     levels: [
       '+8% damage, +5% accuracy',
       '+12% fire rate, reduced recoil',
-      'Unlock alt-fire mode (hold aim + fire)',
-      'Unlock special ammo: incendiary / shock rounds',
+      'Alt-fire: aim + fire launches a heavy slug (1.8x dmg, heavy knockback)',
+      'Incendiary rounds: hits set suspects ablaze (6 dmg/s for 2.5s)',
     ],
   },
   armor: {
