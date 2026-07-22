@@ -34,6 +34,23 @@ const SIGN_SETS = {
 const CIV_OUTFITS = ['#8d95a8', '#a89b8d', '#7d96a0', '#a08d99', '#96a08d', '#9a8da8'];
 const SKINS = ['#e8c39e', '#c68e5f', '#8d5524', '#f1d5b8', '#a56a3f'];
 
+// 2D-fallback environment palette — mirrors the 3D themes so a warehouse or
+// precinct still reads as itself without WebGL. floor: two grout-alternating
+// interior tones; wall*: top face / front-face gradient / solid side; outdoor
+// gates neon signage + rain puddles (a street thing).
+const ENV_2D = {
+  street:     { floor: ['#1e1a28', '#1c1926'], wallTop: '#2f3a52', wfA: '#232e4a', wfB: '#141b30', wallSolid: '#2a3448', bevel: 'rgba(170,200,255,0.10)', outdoor: true },
+  club:       { floor: ['#191320', '#17111d'], wallTop: '#3a2748', wfA: '#2e1d3a', wfB: '#1a1024', wallSolid: '#33223f', bevel: 'rgba(220,150,255,0.10)', outdoor: false },
+  warehouse:  { floor: ['#34383f', '#30343b'], wallTop: '#565d66', wfA: '#444a52', wfB: '#282d33', wallSolid: '#4a5058', bevel: 'rgba(200,210,220,0.10)', outdoor: false },
+  port:       { floor: ['#34383f', '#30343b'], wallTop: '#4a545e', wfA: '#3a434c', wfB: '#232a30', wallSolid: '#414b54', bevel: 'rgba(190,205,220,0.10)', outdoor: true },
+  lab:        { floor: ['#28322e', '#242e2a'], wallTop: '#48524c', wfA: '#38423c', wfB: '#212a25', wallSolid: '#3f4a43', bevel: 'rgba(180,220,200,0.10)', outdoor: false },
+  precinct:   { floor: ['#2c3038', '#282c34'], wallTop: '#565d68', wfA: '#434a54', wfB: '#282d35', wallSolid: '#4c525c', bevel: 'rgba(200,210,225,0.10)', outdoor: false },
+  industrial: { floor: ['#2e3238', '#2a2e34'], wallTop: '#4c525a', wfA: '#3c424a', wfB: '#22262c', wallSolid: '#43494f', bevel: 'rgba(190,200,210,0.10)', outdoor: false },
+  office:     { floor: ['#26262e', '#232330'], wallTop: '#565d6a', wfA: '#434a56', wfB: '#282d36', wallSolid: '#4c525e', bevel: 'rgba(200,210,225,0.10)', outdoor: false },
+  penthouse:  { floor: ['#302a24', '#2c2620'], wallTop: '#4a423a', wfA: '#3a332c', wfB: '#221e19', wallSolid: '#413a32', bevel: 'rgba(220,190,140,0.12)', outdoor: false },
+};
+function env2D(w) { return ENV_2D[w.mission.environment] ?? ENV_2D.street; }
+
 const cache = { key: null, base: null, lights: [], light: null };
 
 export function draw(ctx, w, settings) {
@@ -250,6 +267,8 @@ function bakeStatic(w) {
 
   const wall = (x, y) => w.walls.has(x + ',' + y);
   const road = (x, y) => w.roads.has(x + ',' + y);
+  const pal = env2D(w);
+  const showSigns = w.mission.environment === 'club' || (pal.outdoor && w.mission.environment !== 'port');
 
   for (let ty = 0; ty < w.rows; ty++) {
     for (let tx = 0; tx < w.cols; tx++) {
@@ -315,9 +334,9 @@ function bakeStatic(w) {
           g.stroke();
         }
       } else {
-        // interior floor: dark tiles with grout
+        // interior floor: dark tiles with grout, tinted to the environment
         const warm = hash(tx, ty, 3) > 0.5;
-        g.fillStyle = warm ? '#1e1a28' : '#1c1926';
+        g.fillStyle = warm ? pal.floor[0] : pal.floor[1];
         g.fillRect(px, py, TILE, TILE);
         g.strokeStyle = 'rgba(0,0,0,0.6)';
         g.lineWidth = 1;
@@ -334,7 +353,7 @@ function bakeStatic(w) {
         g.ellipse(px + TILE * hash(tx, ty, 5), py + TILE * hash(tx, ty, 6), 14, 8, h0 * 3, 0, Math.PI * 2);
         g.fill();
       }
-      if (hash(tx, ty, 8) > 0.92) {
+      if (pal.outdoor && showSigns && hash(tx, ty, 8) > 0.92) {
         const puddleX = px + TILE / 2, puddleY = py + TILE / 2;
         const neon = NEON[(hash(tx, ty, 9) * NEON.length) | 0];
         g.fillStyle = 'rgba(10,14,26,0.85)';
@@ -378,11 +397,11 @@ function bakeStatic(w) {
       if (southOpen) {
         // top face + front face
         const frontH = 19;
-        g.fillStyle = '#2f3a52';
+        g.fillStyle = pal.wallTop;
         g.fillRect(px, py, TILE, TILE - frontH);
         const ff = g.createLinearGradient(px, py + TILE - frontH, px, py + TILE);
-        ff.addColorStop(0, '#232e4a');
-        ff.addColorStop(1, '#141b30');
+        ff.addColorStop(0, pal.wfA);
+        ff.addColorStop(1, pal.wfB);
         g.fillStyle = ff;
         g.fillRect(px, py + TILE - frontH, TILE, frontH);
         g.fillStyle = 'rgba(160,200,255,0.16)';
@@ -392,11 +411,11 @@ function bakeStatic(w) {
           g.fillRect(px + 10, py + TILE - frontH + 5, TILE - 20, 4);
         }
       } else {
-        g.fillStyle = '#2a3448';
+        g.fillStyle = pal.wallSolid;
         g.fillRect(px, py, TILE, TILE);
       }
       // top-face bevels
-      g.fillStyle = 'rgba(170,200,255,0.10)';
+      g.fillStyle = pal.bevel;
       if (!wall(tx, ty - 1)) g.fillRect(px, py, TILE, 2);
       if (!wall(tx - 1, ty)) g.fillRect(px, py, 2, TILE);
       g.fillStyle = 'rgba(0,0,0,0.35)';
@@ -406,8 +425,8 @@ function bakeStatic(w) {
         g.fillRect(px + 8, py + 8, TILE - 16, TILE - 16);
       }
 
-      // streetlamp pools on sidewalk-adjacent walls
-      if (southOpen && hash(tx, ty, 30) > 0.8) {
+      // streetlamp pools on sidewalk-adjacent walls (outdoor scenes only)
+      if (southOpen && pal.outdoor && hash(tx, ty, 30) > 0.8) {
         const lx = px + TILE / 2, ly = py + TILE + 14;
         const lg = g.createRadialGradient(lx, ly, 4, lx, ly, 64);
         lg.addColorStop(0, 'rgba(255,214,150,0.20)');
@@ -422,7 +441,7 @@ function bakeStatic(w) {
       const sxTest = px + TILE / 2, syTest = py + TILE - 9;
       const crowded = cache.lights.some((s) => s.kind === 'sign'
         && Math.abs(s.y - syTest) < 6 && Math.abs(s.x - sxTest) < 120);
-      if (southOpen && !crowded && hash(tx, ty, 21) > 0.62) {
+      if (southOpen && showSigns && !crowded && hash(tx, ty, 21) > 0.62) {
         const signs = SIGN_SETS[w.mission.signage] ?? SIGN_SETS.street;
         const [text, color] = signs[(hash(tx, ty, 22) * signs.length) | 0];
         const sx = px + TILE / 2, sy = py + TILE - 9;

@@ -38,15 +38,15 @@ const NEON = ['#31d3ff', '#ff4fd8', '#ffd94f', '#58d0ba', '#9dff57', '#ff8a3d'];
 // is per-tile height noise (big for city skylines, tiny for real walls),
 // `signs` gates neon signage, `floor` picks the ground painter for '.' tiles.
 const ENVIRONMENTS = {
-  street:     { wall: 'facade',    hMul: 1,    vary: 0.6,  tint: '#3a4668', signs: true,  floor: 'asphalt',  outdoor: true },
-  club:       { wall: 'club',      hMul: 0.5,  vary: 0.04, tint: '#4a3a58', signs: true,  floor: 'club' },
-  warehouse:  { wall: 'metal',     hMul: 0.55, vary: 0.05, tint: '#6a7482', signs: false, floor: 'concrete' },
-  port:       { wall: 'container', hMul: 0.5,  vary: 0.3,  tint: '#ffffff', signs: false, floor: 'concrete', outdoor: true },
-  lab:        { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#96a29a', signs: false, floor: 'epoxy' },
-  precinct:   { wall: 'block',     hMul: 0.5,  vary: 0.04, tint: '#707888', signs: false, floor: 'tile' },
-  industrial: { wall: 'metal',     hMul: 0.55, vary: 0.06, tint: '#565e6a', signs: false, floor: 'deck' },
-  office:     { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#8892a2', signs: false, floor: 'carpet' },
-  penthouse:  { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#a89e8e', signs: false, floor: 'marble' },
+  street:     { wall: 'facade',    hMul: 1,    vary: 0.6,  tint: '#3a4668', signs: true,  floor: 'asphalt',  outdoor: true, props: 'street' },
+  club:       { wall: 'club',      hMul: 0.5,  vary: 0.04, tint: '#4a3a58', signs: true,  floor: 'club',     props: 'club' },
+  warehouse:  { wall: 'metal',     hMul: 0.55, vary: 0.05, tint: '#6a7482', signs: false, floor: 'concrete', props: 'warehouse' },
+  port:       { wall: 'container', hMul: 0.5,  vary: 0.3,  tint: '#ffffff', signs: false, floor: 'concrete', outdoor: true, props: 'port' },
+  lab:        { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#96a29a', signs: false, floor: 'epoxy',    props: 'lab' },
+  precinct:   { wall: 'block',     hMul: 0.5,  vary: 0.04, tint: '#707888', signs: false, floor: 'tile',     props: 'precinct' },
+  industrial: { wall: 'metal',     hMul: 0.55, vary: 0.06, tint: '#565e6a', signs: false, floor: 'deck',     props: 'warehouse' },
+  office:     { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#8892a2', signs: false, floor: 'carpet',   props: 'office' },
+  penthouse:  { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#a89e8e', signs: false, floor: 'marble',   props: 'penthouse' },
 };
 const CONTAINER_COLORS = ['#b4432e', '#2e6ab4', '#3c8a4a', '#c9822f', '#8a3c6e', '#4a8a92'];
 function envFor(mission) {
@@ -254,7 +254,7 @@ function init(canvas) {
   // blackout missions: each agent carries a torch — the only friendly light
   const torches = [];
   for (let i = 0; i < 2; i++) {
-    const t = new THREE.SpotLight('#fff3d0', 0, 520, 0.5, 0.45, 1.2);
+    const t = new THREE.SpotLight('#fff3d0', 0, 520, 0.52, 0.7, 1.2);
     t.visible = false;
     scene.add(t, t.target);
     torches.push(t);
@@ -282,9 +282,11 @@ function init(canvas) {
 
   // SSAO — screen-space ambient occlusion for depth cues
   const ssao = new SSAOPass(scene, camera, canvas.width, canvas.height);
-  ssao.kernelRadius = 16;
-  ssao.minDistance = 0.005;
-  ssao.maxDistance = 0.12;
+  // Tuned for the 48px-tile world: the default radius was invisibly small next
+  // to crate/wall geometry, so contact shadows never read.
+  ssao.kernelRadius = 28;
+  ssao.minDistance = 0.003;
+  ssao.maxDistance = 0.2;
   composer.addPass(ssao);
 
   // Bloom — neon glow
@@ -1025,11 +1027,111 @@ function buildProp(pr) {
     g.userData = { glints };
     return g;
   }
-  const h = pr.kind === 'shelf' ? 56 : 38;
-  const m = new THREE.Mesh(new THREE.BoxGeometry(pr.r * 2, h, pr.r * 2),
-    pr.kind === 'shelf' ? R.mat.shelf : R.mat.crate);
-  m.position.y = h / 2; m.castShadow = true; m.receiveShadow = true;
-  return m;
+  // crate / shelf: dressed to match the environment so cover reads as the room
+  return buildThemedProp(pr, pr._style ?? 'street');
+}
+
+// A `crate` and a `shelf` are the two cover primitives the maps place; here they
+// take on the furniture of wherever the mission is set. Same footprint (pr.r),
+// same collision — only the silhouette changes. Kept to a few meshes each.
+function buildThemedProp(pr, style) {
+  const g = new THREE.Group();
+  const r = pr.r;
+  const box = (w, h, d, color, y, opts = {}) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshStandardMaterial({ color, roughness: opts.rough ?? 0.8, metalness: opts.metal ?? 0.1,
+        emissive: opts.emissive ?? '#000000', emissiveIntensity: opts.ei ?? 0 }));
+    m.position.set(opts.x ?? 0, y, opts.z ?? 0);
+    m.castShadow = true; m.receiveShadow = true;
+    g.add(m); return m;
+  };
+  const cyl = (rt, rb, h, color, y, opts = {}) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 14),
+      new THREE.MeshStandardMaterial({ color, roughness: opts.rough ?? 0.7, metalness: opts.metal ?? 0.3 }));
+    m.position.set(opts.x ?? 0, y, opts.z ?? 0);
+    m.castShadow = true; m.receiveShadow = true;
+    g.add(m); return m;
+  };
+  const shelf = pr.kind === 'shelf';
+
+  if (style === 'warehouse') {
+    if (shelf) { // pallet racking: uprights + beams + a load
+      for (const sx of [-r * 0.8, r * 0.8]) for (const sz of [-r * 0.7, r * 0.7])
+        box(4, 62, 4, '#c8791f', 31, { x: sx, z: sz, metal: 0.4, rough: 0.5 });
+      for (const by of [22, 46]) { box(r * 1.9, 3, 4, '#b06a18', by, { z: -r * 0.7, metal: 0.4 }); box(r * 1.9, 3, 4, '#b06a18', by, { z: r * 0.7, metal: 0.4 }); }
+      box(r * 1.7, 14, r * 1.3, '#6b5334', 30, { rough: 0.95 }); // shrink-wrapped load
+      box(r * 1.8, 3, r * 1.5, '#7a6038', 51, { rough: 0.95 });
+    } else { // blue steel drum on a pallet
+      box(r * 1.9, 5, r * 1.9, '#5a4a30', 3, { rough: 1 }); // pallet
+      cyl(r * 0.7, r * 0.72, 30, '#2f6ab0', 21, { metal: 0.5, rough: 0.4 });
+      cyl(r * 0.74, r * 0.74, 3, '#24528a', 8); cyl(r * 0.74, r * 0.74, 3, '#24528a', 34);
+    }
+  } else if (style === 'port') {
+    if (shelf) { // stacked mini-container
+      const c = CONTAINER_COLORS[pr.id % CONTAINER_COLORS.length];
+      box(r * 2, 30, r * 1.8, c, 16, { metal: 0.35, rough: 0.6 });
+      box(r * 2.02, 4, r * 1.82, shadeHex(c, 0.6), 32, { metal: 0.4 });
+    } else { // lashed shipping crate
+      box(r * 1.9, 34, r * 1.9, '#7a5c34', 17, { rough: 0.95 });
+      for (const e of [-1, 1]) box(3, 34, r * 1.9, '#4c3a22', 17, { x: e * r * 0.7, rough: 0.95 });
+      box(r * 1.9, 3, r * 1.9, '#5c4628', 34, { rough: 0.95 });
+    }
+  } else if (style === 'lab') {
+    if (shelf) { // server rack with indicator LEDs
+      box(r * 1.7, 60, r * 1.6, '#20262e', 30, { metal: 0.5, rough: 0.4 });
+      for (let i = 0; i < 5; i++) box(r * 1.5, 6, 2, '#0c1014', 12 + i * 10, { z: r * 0.8 });
+      for (let i = 0; i < 5; i++) box(3, 3, 2, i % 2 ? '#31d3ff' : '#9dff57', 13 + i * 10,
+        { x: r * 0.55, z: r * 0.82, emissive: i % 2 ? '#31d3ff' : '#9dff57', ei: 4 });
+    } else { // sealed chemical drum, hazard band
+      cyl(r * 0.85, r * 0.9, 34, '#d8c24a', 17, { metal: 0.3, rough: 0.5 });
+      cyl(r * 0.88, r * 0.88, 6, '#2a2a2a', 20); cyl(r * 0.9, r * 0.9, 3, '#c4b040', 34);
+    }
+  } else if (style === 'precinct') {
+    if (shelf) { // duty desk / counter
+      box(r * 2, 30, r * 1.4, '#4a5262', 15, { rough: 0.7, metal: 0.15 });
+      box(r * 2.1, 5, r * 1.6, '#5c6576', 31, { rough: 0.6 }); // worktop
+      box(r * 2, 20, 3, '#3a414e', 26, { z: -r * 0.6 }); // back kick panel
+    } else { // steel filing cabinet
+      box(r * 1.6, 46, r * 1.5, '#5a6068', 23, { metal: 0.4, rough: 0.5 });
+      for (let i = 0; i < 3; i++) box(r * 1.5, 2, 2, '#2c3038', 12 + i * 13, { z: r * 0.76 });
+      for (let i = 0; i < 3; i++) box(6, 2, 3, '#c9ccd2', 12 + i * 13, { z: r * 0.78, metal: 0.6 });
+    }
+  } else if (style === 'office') {
+    if (shelf) { // cubicle divider + monitor
+      box(r * 2, 46, 6, '#6b7280', 23, { rough: 0.85, z: -r * 0.5 });
+      box(6, 46, r * 1.4, '#6b7280', 23, { rough: 0.85, x: -r * 0.8 });
+      box(r * 1.6, 22, r * 1.0, '#8a919e', 11, { rough: 0.6 }); // desk surface block
+      box(20, 13, 3, '#12161c', 30, { z: -r * 0.35, emissive: '#1a3550', ei: 1.2 });
+    } else { // desk with monitor
+      box(r * 2, 22, r * 1.5, '#7a6f5e', 11, { rough: 0.75 });
+      box(r * 2.05, 3, r * 1.55, '#8a7e6a', 22, { rough: 0.7 });
+      box(22, 14, 3, '#0e1218', 32, { emissive: '#1a3550', ei: 1.2 });
+    }
+  } else if (style === 'penthouse') {
+    if (shelf) { // display shelving with warm trim
+      box(r * 1.9, 58, r * 1.4, '#2e2822', 29, { rough: 0.5, metal: 0.2 });
+      for (let i = 0; i < 3; i++) box(r * 1.9, 2, r * 1.4, '#b08a44', 16 + i * 17, { metal: 0.7, rough: 0.3 });
+    } else { // lounge sofa
+      box(r * 2, 14, r * 1.6, '#8a4a52', 9, { rough: 0.9 });
+      box(r * 2, 16, 8, '#7c4048', 18, { rough: 0.9, z: -r * 0.7 });
+      for (const e of [-1, 1]) box(8, 16, r * 1.6, '#7c4048', 16, { x: e * r * 0.9, rough: 0.9 });
+    }
+  } else if (style === 'club') {
+    if (shelf) { // booth seating
+      box(r * 2, 16, r * 1.4, '#3a1f42', 9, { rough: 0.85 });
+      box(r * 2, 26, 8, '#4a2856', 20, { rough: 0.85, z: -r * 0.6 });
+    } else { // speaker stack
+      box(r * 1.7, 42, r * 1.6, '#141018', 21, { rough: 0.7 });
+      cyl(r * 0.55, r * 0.55, 3, '#2a2230', 30, { z: r * 0.82 });
+      cyl(r * 0.3, r * 0.3, 3, '#2a2230', 14, { z: r * 0.82 });
+    }
+  } else { // street: the original boxes
+    const h = shelf ? 56 : 38;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(r * 2, h, r * 2), shelf ? R.mat.shelf : R.mat.crate);
+    m.position.y = h / 2; m.castShadow = true; m.receiveShadow = true;
+    g.add(m);
+  }
+  return g;
 }
 
 // ---------------------------------------------------------------- vehicles
@@ -1200,8 +1302,11 @@ export function draw3d(canvas, w, settings) {
     const on = dark && p && !p.downed;
     t.visible = on;
     if (!on) { t.intensity = 0; return; }
-    t.intensity = 90000 * fx; // physical units over pixel distances
-    t.position.set(p.x, 42, p.y);
+    // Softer, higher pool: a tight 90k spotlight on the green floor bloomed to a
+    // white hole at the player. Raise the origin and drop the intensity so the
+    // cone spreads before it lands.
+    t.intensity = 52000 * fx; // physical units over pixel distances
+    t.position.set(p.x, 64, p.y);
     t.target.position.set(p.x + Math.cos(p.aimAngle) * 240, 6, p.y + Math.sin(p.aimAngle) * 240);
     t.target.updateMatrixWorld();
   });
@@ -1232,7 +1337,7 @@ export function draw3d(canvas, w, settings) {
   // SSAO
   if (R.ssao) {
     R.ssao.enabled = !reduced;
-    R.ssao.kernelRadius = 16 * fxInt;
+    R.ssao.kernelRadius = 28 * fxInt;
     R.ssao.minDistance = 0.005;
     R.ssao.maxDistance = 0.12;
   }
@@ -1351,10 +1456,11 @@ function syncPickups(w, now) {
 
 function syncProps(w, now, settings) {
   const seen = new Set();
+  const propStyle = envFor(w.mission).props;
   for (const pr of w.props) {
     seen.add(pr.id);
     let m = R.props.get(pr.id);
-    if (!m) { m = buildProp(pr); m.position.set(pr.x, 0, pr.y); R.scene.add(m); R.props.set(pr.id, m); }
+    if (!m) { pr._style = propStyle; m = buildProp(pr); m.position.set(pr.x, 0, pr.y); R.scene.add(m); R.props.set(pr.id, m); }
     if (pr.kind === 'vat' && pr.fuse != null) {
       const blink = !settings.reducedFlash && Math.floor(now / 70) % 2 === 0;
       const glow = m.userData.glow;

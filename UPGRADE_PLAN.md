@@ -39,17 +39,22 @@ Implement in world.js (pure sim) + input/render support, one test per effect.
 
 Per-mission wall/floor themes landed (checkpoint 3). Remaining:
 
-- [ ] Per-theme prop dressing: pallet racks + forklifts (warehouse), gantry
-      crane silhouettes (port), holding cells/desks/counters (precinct),
-      cubicle clusters + server racks (office/lab), booths + bar (club),
-      planters + furniture (penthouse)
-- [ ] 2D fallback renderer (render.js) knows nothing about environments —
-      port/warehouse/precinct still draw the generic look there
-- [ ] SSAO is nearly invisible (~1 luminance delta): retune kernelRadius /
-      min/maxDistance for the 48px-tile world scale, or drop the pass
-- [ ] m11 blackout: torch spotlight blows out to a white-green hole at the
-      player; tame intensity/bloom interaction
-- [ ] THREE deprecation warning: PCFSoftShadowMap → migrate shadow config
+- [x] Per-theme prop dressing: warehouse steel drums / pallet racking, port
+      stacked containers + lashed crates, precinct duty desks + filing
+      cabinets, office desks-with-monitors + cubicle dividers, lab server
+      racks + chemical drums, club booths + speaker stacks, penthouse
+      lounges + display shelving. `crate`/`shelf` map primitives keep their
+      footprint; only the silhouette changes per `ENVIRONMENTS[].props`.
+- [x] 2D fallback renderer (render.js): `ENV_2D` palette tints interior floor
+      + wall faces per environment; neon signage / rain puddles / streetlamps
+      now gated to outdoor (street/club) scenes only.
+- [x] SSAO retuned for the 48px-tile world (kernelRadius 16→28, maxDistance
+      0.12→0.2): contact shadows under crates/walls now read.
+- [x] m11 blackout torch: raised origin (42→64), widened penumbra (0.45→0.7),
+      dropped intensity (90k→52k) — reads as a beam, no white-hole blowout.
+- [~] PCFSoftShadowMap: verified NOT a live warning (the earlier warning came
+      from the reverted broken build). Left as PCFSoftShadowMap to keep soft
+      shadows; nothing to migrate.
 
 ## Phase C — Co-op and input verification
 
