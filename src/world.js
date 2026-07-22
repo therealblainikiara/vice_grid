@@ -162,6 +162,7 @@ export function addPlayer(w, agentKey, slot) {
     armor: a.armor, aimAngle: 0, aiming: false, moving: false,
     weapons: [makeWeaponState('pistol'), makeWeaponState('taser')],
     weaponIdx: 0, meleeCd: 0, dodgeTimer: 0, dodgeCd: 0, dodgeDx: 0, dodgeDy: 0,
+    dodgeBoost: 1, sliding: false, sprintTimer: 0, sprintCd: 0, lastDodgeTap: 0,
     iframes: 1.2, downed: false, reviveProgress: 0, hitFlash: 0, // brief spawn protection
     cuffingId: null, commandCd: 0, prev: {},
   };
@@ -454,6 +455,35 @@ function alertEnemy(e) { e.state = 'FIGHT'; return e; }
 
 // --- player ---
 
+// Mobility L4 sprint-burst state machine (pure — no world/DOM). Mutates and
+// reads the carrier's { sprintTimer, sprintCd, lastDodgeTap } each frame and
+// returns true only on the frame a burst starts. A burst starts on the SECOND
+// dodge tap inside ue.sprintTapWindow while moving and not aiming; when the
+// timer runs out it opens a cooldown, and an active burst or live cooldown
+// blocks re-triggering. Below L4, ue.sprintBurst is false so it never fires.
+export function stepSprint(s, dt, ue, { tapped, moving, aiming }) {
+  s.sprintCd = Math.max(0, (s.sprintCd ?? 0) - dt);
+  s.lastDodgeTap = Math.max(0, (s.lastDodgeTap ?? 0) - dt);
+  if ((s.sprintTimer ?? 0) > 0) {
+    s.sprintTimer -= dt;
+    if (s.sprintTimer <= 0) { s.sprintTimer = 0; s.sprintCd = ue.sprintCd; } // expiry → cooldown
+  } else {
+    s.sprintTimer = 0;
+  }
+  let activated = false;
+  if (tapped) {
+    if (ue.sprintBurst && moving && !aiming
+        && s.lastDodgeTap > 0 && s.sprintTimer <= 0 && s.sprintCd <= 0) {
+      s.sprintTimer = ue.sprintDuration; // second tap in-window: fire the burst
+      s.lastDodgeTap = 0;
+      activated = true;
+    } else {
+      s.lastDodgeTap = ue.sprintTapWindow; // arm the window for the next tap
+    }
+  }
+  return activated;
+}
+
 function updatePlayer(w, p, dt, c) {
   p.hitFlash = Math.max(0, p.hitFlash - dt);
   p.iframes = Math.max(0, p.iframes - dt);
@@ -499,22 +529,42 @@ function updatePlayer(w, p, dt, c) {
     }
   }
 
-  // Dodge
+  // Movement intent — computed before the dodge/slide split because the L4
+  // sprint double-tap needs the live move vector (the second tap lands while a
+  // dodge is still animating, so p.moving would otherwise be stale).
+  let mx = c.moveX, my = c.moveY;
+  const ml = Math.hypot(mx, my);
+  if (ml > 1) { mx /= ml; my /= ml; }
+  p.moving = ml > 0.01;
+  const dodgeTapped = c.dodge && justPressed(p, c, 'dodge');
+
+  // Mobility L4: double-tap dodge (moving, not aiming) → sprint burst. The
+  // helper ticks the burst timer + cooldown every frame and returns true the
+  // frame it fires. Gated: below L4, ue.sprintBurst is false so it never fires.
+  const sprinted = stepSprint(p, dt, ue, { tapped: dodgeTapped, moving: p.moving, aiming: !!c.aim });
+  if (sprinted) w.fx.dodge?.();
+  const sprintMul = p.sprintTimer > 0 ? ue.sprintSpeedMul : 1;
+
+  // Dodge / combat slide
   if (p.dodgeTimer > 0) {
     p.dodgeTimer -= dt;
+    if (p.dodgeTimer <= 0) p.sliding = false;
     moveCircle(w, p, p.dodgeDx * p.agent.dodgeSpeed * (p.dodgeBoost ?? 1) * dt, p.dodgeDy * p.agent.dodgeSpeed * (p.dodgeBoost ?? 1) * dt);
   } else {
-    let mx = c.moveX, my = c.moveY;
-    const ml = Math.hypot(mx, my);
-    if (ml > 1) { mx /= ml; my /= ml; }
-    p.moving = ml > 0.01;
     const slow = c.aim && w.settings?.holdToAim ? 0.55 : 1;
-    moveCircle(w, p, mx * speed * slow * dt, my * speed * slow * dt);
+    moveCircle(w, p, mx * speed * sprintMul * slow * dt, my * speed * sprintMul * slow * dt);
 
-    if (c.dodge && p.dodgeCd <= 0 && p.moving && justPressed(p, c, 'dodge')) {
-      p.dodgeTimer = p.agent.dodgeTime; p.dodgeCd = ue.dodgeCd; // Mobility L2 shortens
-      p.dodgeBoost = ue.dodgeDistMul;
-      p.iframes = p.agent.dodgeTime + 0.08;
+    if (dodgeTapped && p.dodgeCd <= 0 && p.moving) {
+      // Mobility L3: dodging WHILE aiming becomes a combat slide — 1.5x duration,
+      // more ground, and i-frames for the whole slide. Aiming/firing already run
+      // below regardless, so the slide keeps them; its distinct feel is the
+      // longer/farther committed movement with full-duration invulnerability.
+      const sliding = ue.combatSlide && !!c.aim;
+      const dodgeTime = p.agent.dodgeTime * (sliding ? ue.slideTimeMul : 1);
+      p.dodgeTimer = dodgeTime; p.dodgeCd = ue.dodgeCd; // Mobility L2 shortens
+      p.dodgeBoost = sliding ? ue.slideDistMul : ue.dodgeDistMul;
+      p.iframes = dodgeTime + 0.08; // slide keeps i-frames its whole duration
+      p.sliding = sliding;
       p.dodgeDx = mx / (ml || 1); p.dodgeDy = my / (ml || 1);
       w.fx.dodge?.();
       if (p.agent.dodgeStagger) { // RHINO shove staggers nearby enemies

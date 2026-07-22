@@ -30,6 +30,17 @@ export function upgradeEffects(upgrades = {}) {
     speedMul: 1 + u('mobility') * 0.06,
     dodgeCd: u('mobility') >= 2 ? 0.72 : 0.9,
     dodgeDistMul: u('mobility') >= 2 ? 1.15 : 1,
+    // L3 combat slide: dodging WHILE aiming becomes a slide — longer, covers
+    // more ground, keeps i-frames the whole time (you still aim/fire during it).
+    combatSlide: u('mobility') >= 3,
+    slideTimeMul: 1.5,   // slide lasts ~1.5x a normal dodge
+    slideDistMul: 1.6,   // and covers more ground than the L2 dodge boost
+    // L4 sprint burst: double-tap dodge (moving, not aiming) → 2x speed 3s, 20s CD.
+    sprintBurst: u('mobility') >= 4,
+    sprintSpeedMul: 2,
+    sprintDuration: 3,
+    sprintCd: 20,
+    sprintTapWindow: 0.3, // max gap between the two dodge taps
     // enforcement
     cuffSpeedMul: 1 + u('enforcement') * 0.15,
     intimidateRadiusMul: u('enforcement') >= 1 ? 1.1 : 1,
@@ -67,8 +78,8 @@ export const UPGRADE_DEFS = {
     levels: [
       '+6% move speed',
       'Dodge cooldown –20%, dodge distance +15%',
-      'Unlock combat slide (crouch + dodge)',
-      'Unlock sprint burst (double speed 3s, 20s CD)',
+      'Combat slide: dodge while aiming for a longer slide that keeps firing',
+      'Sprint burst: double-tap dodge for 2x speed (3s, 20s cooldown)',
     ],
   },
   enforcement: {
