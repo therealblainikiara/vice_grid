@@ -212,15 +212,12 @@ function finishMission(win) {
     campaign.totals.evidenceTotal += stats.evidenceTotal;
     campaign.totals.civiliansKilled += stats.civiliansKilled;
     campaign.totals.intel += stats.intel ?? 0;
+    // Both agents draw from one shared upgrade loadout (addPlayer applies the
+    // same settings.upgrades to every slot), so co-op earns into one shared
+    // pool. The old code split earnings into a separate p2UpgradePoints that
+    // nothing could ever spend — i.e. co-op silently lost half its points.
     const basePoints = { S: 3, A: 2, B: 2, C: 1, D: 1 }[grade.grade];
-    // Co-op: split upgrade points between players (rounded up for P1)
-    if (coopArmed && world.players.length === 2) {
-      campaign.upgradePoints += Math.ceil(basePoints / 2);
-      // P2 points stored for their agent
-      campaign.p2UpgradePoints = (campaign.p2UpgradePoints || 0) + Math.floor(basePoints / 2);
-    } else {
-      campaign.upgradePoints += basePoints;
-    }
+    campaign.upgradePoints += basePoints;
     campaign.missionIndex += 1;
     recordMissionOutcome(campaign, mission, stats);
     store.save(0, campaign);
@@ -284,6 +281,13 @@ on('btn-missions', () => {
 on('btn-missions-back', toMenu);
 function showUpgradeScreen() {
   state = 'upgrade';
+  // Reclaim points a legacy co-op save banked into the dead p2 pool so nobody
+  // loses what they earned before the split was removed.
+  if (campaign.p2UpgradePoints) {
+    campaign.upgradePoints += campaign.p2UpgradePoints;
+    campaign.p2UpgradePoints = 0;
+    store.save(0, campaign);
+  }
   ui.showUpgrade(campaign, (key, isBuy) => {
     if ((isBuy ? buyUpgrade : refundUpgrade)(campaign, key)) {
       audio.uiConfirm();

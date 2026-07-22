@@ -254,16 +254,11 @@ export function makeUI(settings, audio) {
     const help = document.createElement('div');
     help.className = 'hint';
     help.style.marginTop = '8px';
-    help.innerHTML = 'Bluetooth gamepads: pair in Windows Settings → Bluetooth & devices, then press any button to wake. Chrome requires a button press before the Gamepad API sees the device. For BLE controllers not showing up, ensure they are in XInput mode (often hold Start+Home) and re-pair.';
+    help.innerHTML = '<b>Controller setup.</b> USB pads work on plug-in — press any button to wake them (Chrome only sees a pad after a button press). '
+      + '<b>Bluetooth:</b> pair in Windows Settings → Bluetooth &amp; devices, then press a button. '
+      + 'If a BLE controller does not appear, put it in XInput mode (often hold Start+Home) and re-pair. '
+      + 'Xbox, PlayStation (DualShock/DualSense) and most XInput pads map automatically; use the bindings list above to reassign any button.';
     $('settings-body').appendChild(help);
-    // Guide link
-    const guideLink = document.createElement('a');
-    guideLink.href = 'https://github.com/yourrepo/vice-grid/wiki/Gamepad-Setup';
-    guideLink.target = '_blank';
-    guideLink.textContent = 'Open Gamepad Setup Guide';
-    guideLink.style.display = 'block';
-    guideLink.style.marginTop = '8px';
-    $('settings-body').appendChild(guideLink);
     $('settings-body').querySelectorAll('input, select').forEach((el) => {
       el.addEventListener('input', () => {
         const key = el.dataset.key;

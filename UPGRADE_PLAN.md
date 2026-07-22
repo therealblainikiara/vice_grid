@@ -57,11 +57,20 @@ Per-mission wall/floor themes landed (checkpoint 3). Remaining:
 
 ## Phase C — Co-op and input verification
 
-- [ ] Physical gamepad end-to-end test (drop-in, bindings, vibration) —
-      HUD P2 box and pad path are implemented but never hardware-tested
-- [ ] Verify P2 upgrade-point spending flow (p2UpgradePoints accrues; confirm
-      the upgrade screen lets P2 spend them)
-- [ ] Gamepad help panel: replace placeholder BLE pairing guide link
+- [~] Physical gamepad path CODE-REVIEWED (input.js: analog triggers 6/7,
+      left-stick move / right-stick aim, co-op slot routing pad0/pad1,
+      Start-to-join, rumble). Correct on review + detection API confirmed in
+      browser. FINAL hardware sign-off (real controller drop-in / rumble)
+      still needs a physical pad — cannot be done autonomously.
+- [x] P2 upgrade-point spending: FIXED. Both agents share one upgrade
+      loadout (addPlayer applies the same settings.upgrades to every slot),
+      so the co-op point "split" was routing half of every reward into a
+      p2UpgradePoints pool nothing could spend — co-op silently lost points.
+      Now all earnings go to the shared pool; legacy p2 points are reclaimed
+      into it when the upgrade screen opens.
+- [x] Gamepad help: removed the dead placeholder wiki link (404'd) and
+      expanded the inline controller-setup help (USB/BLE/XInput, auto-mapping
+      for Xbox/PlayStation pads, pointer to the rebinding list).
 
 ## Phase D — Content & release polish
 
