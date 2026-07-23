@@ -42,11 +42,11 @@ const ENVIRONMENTS = {
   club:       { wall: 'club',      hMul: 0.5,  vary: 0.04, tint: '#4a3a58', signs: true,  floor: 'club',     props: 'club' },
   warehouse:  { wall: 'metal',     hMul: 0.55, vary: 0.05, tint: '#6a7482', signs: false, floor: 'concrete', props: 'warehouse' },
   port:       { wall: 'container', hMul: 0.5,  vary: 0.3,  tint: '#ffffff', signs: false, floor: 'concrete', outdoor: true, props: 'port' },
-  lab:        { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#96a29a', signs: false, floor: 'epoxy',    props: 'lab' },
-  precinct:   { wall: 'block',     hMul: 0.5,  vary: 0.04, tint: '#707888', signs: false, floor: 'tile',     props: 'precinct' },
+  lab:        { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#96a29a', signs: false, floor: 'epoxy',    props: 'lab',       paint: '#cfd8d1' },
+  precinct:   { wall: 'block',     hMul: 0.5,  vary: 0.04, tint: '#707888', signs: false, floor: 'tile',     props: 'precinct',  paint: '#c9cdd3' },
   industrial: { wall: 'metal',     hMul: 0.55, vary: 0.06, tint: '#565e6a', signs: false, floor: 'deck',     props: 'warehouse' },
-  office:     { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#8892a2', signs: false, floor: 'carpet',   props: 'office' },
-  penthouse:  { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#a89e8e', signs: false, floor: 'marble',   props: 'penthouse' },
+  office:     { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#8892a2', signs: false, floor: 'carpet',   props: 'office',    paint: '#d6d0c2' },
+  penthouse:  { wall: 'panel',     hMul: 0.5,  vary: 0.04, tint: '#a89e8e', signs: false, floor: 'marble',   props: 'penthouse', paint: '#d8cebd' },
 };
 const CONTAINER_COLORS = ['#b4432e', '#2e6ab4', '#3c8a4a', '#c9822f', '#8a3c6e', '#4a8a92'];
 function envFor(mission) {
@@ -565,6 +565,22 @@ function bakeGround(w) {
       }
     }
   }
+  // indoor levels get warm ceiling-light pools baked onto the floor — the
+  // cheapest possible "lit building" read, no runtime lights spent.
+  if (!theme.outdoor) {
+    for (let ty = 2; ty < w.rows - 1; ty += 4) {
+      for (let tx = 2 + ((ty / 4) % 2 ? 2 : 0); tx < w.cols - 1; tx += 5) {
+        if (at(tx, ty) === '#') continue;
+        const cx = tx * TILE + TILE / 2, cy = ty * TILE + TILE / 2;
+        const lg = g.createRadialGradient(cx, cy, 6, cx, cy, TILE * 2.4);
+        lg.addColorStop(0, 'rgba(255,214,150,0.16)');
+        lg.addColorStop(1, 'rgba(255,214,150,0)');
+        g.fillStyle = lg;
+        g.fillRect(cx - TILE * 2.4, cy - TILE * 2.4, TILE * 4.8, TILE * 4.8);
+      }
+    }
+  }
+
   const anis = Math.min(8, R.renderer.capabilities.getMaxAnisotropy());
   const colorTex = new THREE.CanvasTexture(col);
   colorTex.colorSpace = THREE.SRGBColorSpace;
@@ -715,27 +731,127 @@ function buildStatic(w) {
 
   // thin partitions: a horizontal bar for tiles in an E/W run, a vertical bar for
   // an N/S run — a corner tile gets both, forming a clean L with no fat block.
+  // Painted interiors get a plastered wall + dark baseboard + top trim rail so
+  // partitions read as finished architecture rather than textured slabs.
+  const THIN = TILE * 0.17;
+  const pH = WALL_H * theme.hMul + 6;
+  const indoorDress = theme.wall !== 'facade' && !theme.outdoor;
   if (thin.length) {
-    const THIN = TILE * 0.17;
-    const pH = WALL_H * theme.hMul + 6;
+    const paintMat = theme.paint
+      ? new THREE.MeshStandardMaterial({ color: theme.paint, roughness: 0.86, metalness: 0.02 })
+      : wallMats[0];
+    const baseMat = new THREE.MeshStandardMaterial({ color: '#453e35', roughness: 0.8 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: shadeHex(theme.paint ?? theme.tint, 0.72), roughness: 0.8 });
     const horiz = thin.filter(([tx, ty]) => isWall(tx - 1, ty) || isWall(tx + 1, ty) || (!isWall(tx, ty - 1) && !isWall(tx, ty + 1)));
     const vert = thin.filter(([tx, ty]) => isWall(tx, ty - 1) || isWall(tx, ty + 1));
-    const bars = (list, geo) => {
+    const bars = (list, geo, mat, y, painted) => {
       if (!list.length) return;
-      const mesh = new THREE.InstancedMesh(geo, wallMats[0], list.length);
+      const mesh = new THREE.InstancedMesh(geo, mat, list.length);
       mesh.castShadow = true; mesh.receiveShadow = true;
       list.forEach(([tx, ty], i) => {
         m4.makeScale(1, 1, 1);
-        m4.setPosition(tx * TILE + TILE / 2, pH / 2, ty * TILE + TILE / 2);
+        m4.setPosition(tx * TILE + TILE / 2, y, ty * TILE + TILE / 2);
         mesh.setMatrixAt(i, m4);
-        mesh.setColorAt(i, tintFor(tx, ty));
+        if (painted) mesh.setColorAt(i, colr.setScalar(0.93 + hash(tx, ty, 31) * 0.07));
+        else mesh.setColorAt(i, tintFor(tx, ty));
       });
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       R.statics.add(mesh);
     };
-    bars(horiz, new THREE.BoxGeometry(TILE, pH, THIN));
-    bars(vert, new THREE.BoxGeometry(THIN, pH, TILE));
+    const painted = !!theme.paint;
+    bars(horiz, new THREE.BoxGeometry(TILE, pH, THIN), paintMat, pH / 2, painted);
+    bars(vert, new THREE.BoxGeometry(THIN, pH, TILE), paintMat, pH / 2, painted);
+    if (painted) {
+      bars(horiz, new THREE.BoxGeometry(TILE, 5, THIN * 1.7), baseMat, 2.5, true);
+      bars(vert, new THREE.BoxGeometry(THIN * 1.7, 5, TILE), baseMat, 2.5, true);
+      bars(horiz, new THREE.BoxGeometry(TILE, 3, THIN * 1.5), trimMat, pH - 1.5, true);
+      bars(vert, new THREE.BoxGeometry(THIN * 1.5, 3, TILE), trimMat, pH - 1.5, true);
+    }
+  }
+
+  // ---- doors: a 1-2 tile gap inside an interior wall run gets a framed, ajar
+  // wood door. Purely visual — the sim has no door collision, so every leaf
+  // hangs open and the gap stays walkable exactly as it plays.
+  if (indoorDress) {
+    const wood = new THREE.MeshStandardMaterial({ color: '#7a5230', roughness: 0.6 });
+    const woodDark = new THREE.MeshStandardMaterial({ color: '#4e341d', roughness: 0.65 });
+    const floorAt = (tx, ty) => tx > 0 && ty > 0 && tx < w.cols - 1 && ty < w.rows - 1 && !isWall(tx, ty);
+    const used = new Set();
+    const addDoor = (tx, ty, horizRun, span) => {
+      const g = new THREE.Group();
+      const dH = pH * 0.9;
+      const post = (px, pz) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(horizRun ? 5 : THIN * 2, pH + 3, horizRun ? THIN * 2 : 5), woodDark);
+        m.position.set(px, (pH + 3) / 2, pz); m.castShadow = true; g.add(m);
+      };
+      const x0 = tx * TILE, z0 = ty * TILE;
+      if (horizRun) { post(x0, z0 + TILE / 2); post(x0 + span * TILE, z0 + TILE / 2); }
+      else { post(x0 + TILE / 2, z0); post(x0 + TILE / 2, z0 + span * TILE); }
+      const header = new THREE.Mesh(new THREE.BoxGeometry(horizRun ? span * TILE : THIN * 1.7, 4.5, horizRun ? THIN * 1.7 : span * TILE), woodDark);
+      header.position.set(horizRun ? x0 + span * TILE / 2 : x0 + TILE / 2, pH + 1, horizRun ? z0 + TILE / 2 : z0 + span * TILE / 2);
+      g.add(header);
+      for (const pi of span === 2 ? [0, 1] : [0]) {
+        const hinge = new THREE.Group();
+        const leaf = new THREE.Mesh(new THREE.BoxGeometry(TILE * 0.86, dH, 3), wood);
+        leaf.position.set(TILE * 0.43, dH / 2, 0);
+        leaf.castShadow = true;
+        hinge.add(leaf);
+        if (horizRun) hinge.position.set(pi === 0 ? x0 : x0 + span * TILE, 0, z0 + TILE / 2);
+        else { hinge.position.set(x0 + TILE / 2, 0, pi === 0 ? z0 : z0 + span * TILE); hinge.rotation.y = -Math.PI / 2; }
+        hinge.rotation.y += (pi === 0 ? 1 : -1) * (1.15 + hash(tx, ty, 51 + pi) * 0.45);
+        g.add(hinge);
+      }
+      R.statics.add(g);
+    };
+    for (let ty = 1; ty < w.rows - 1; ty++) {
+      for (let tx = 1; tx < w.cols - 1; tx++) {
+        if (!floorAt(tx, ty) || used.has(tx + ',' + ty)) continue;
+        // gap in an E-W wall: jambs must be run ENDS (no N/S continuation), and
+        // the gap must be a real N-S passage — this rejects 1-wide corridors.
+        const jambEndH = (jx) => isWall(jx, ty) && !isWall(jx, ty - 1) && !isWall(jx, ty + 1);
+        if (floorAt(tx, ty - 1) && floorAt(tx, ty + 1) && jambEndH(tx - 1)) {
+          if (jambEndH(tx + 1)) { addDoor(tx, ty, true, 1); continue; }
+          // second gap tile may sit at a T-junction with a room divider — only
+          // the far jamb needs to be a clean run end
+          if (floorAt(tx + 1, ty) && jambEndH(tx + 2)) {
+            addDoor(tx, ty, true, 2); used.add((tx + 1) + ',' + ty); continue;
+          }
+        }
+        const jambEndV = (jy) => isWall(tx, jy) && !isWall(tx - 1, jy) && !isWall(tx + 1, jy);
+        if (floorAt(tx - 1, ty) && floorAt(tx + 1, ty) && jambEndV(ty - 1)) {
+          if (jambEndV(ty + 1)) { addDoor(tx, ty, false, 1); continue; }
+          if (floorAt(tx, ty + 1) && jambEndV(ty + 2)) {
+            addDoor(tx, ty, false, 2); used.add(tx + ',' + (ty + 1));
+          }
+        }
+      }
+    }
+
+    // ---- outer shell dressing: window bands + warm sconces on interior faces
+    const glassMat = new THREE.MeshStandardMaterial({ color: '#16202e', emissive: '#3a5a7a', emissiveIntensity: 0.55, roughness: 0.15, metalness: 0.4 });
+    const sconceMat = new THREE.MeshStandardMaterial({ color: '#2a241c', emissive: '#ffbe78', emissiveIntensity: 2.0 });
+    const shellH = WALL_H * theme.hMul * 1.5;
+    const dressFace = (tx, ty, wx, wz, alongX) => {
+      const r = hash(tx, ty, 60);
+      if (r > 0.5) {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(alongX ? TILE * 0.72 : 2, 18, alongX ? 2 : TILE * 0.72), glassMat);
+        win.position.set(wx, shellH * 0.55, wz);
+        R.statics.add(win);
+      } else if (r > 0.36) {
+        const sc = new THREE.Mesh(new THREE.BoxGeometry(alongX ? 7 : 2.5, 9, alongX ? 2.5 : 7), sconceMat);
+        sc.position.set(wx, shellH * 0.72, wz);
+        R.statics.add(sc);
+      }
+    };
+    for (let tx = 1; tx < w.cols - 1; tx++) {
+      if (isWall(tx, 0) && !isWall(tx, 1)) dressFace(tx, 0, tx * TILE + TILE / 2, TILE + 1.2, true);
+      if (isWall(tx, w.rows - 1) && !isWall(tx, w.rows - 2)) dressFace(tx, w.rows - 1, tx * TILE + TILE / 2, (w.rows - 1) * TILE - 1.2, true);
+    }
+    for (let ty = 1; ty < w.rows - 1; ty++) {
+      if (isWall(0, ty) && !isWall(1, ty)) dressFace(0, ty, TILE + 1.2, ty * TILE + TILE / 2, false);
+      if (isWall(w.cols - 1, ty) && !isWall(w.cols - 2, ty)) dressFace(w.cols - 1, ty, (w.cols - 1) * TILE - 1.2, ty * TILE + TILE / 2, false);
+    }
   }
 
   if (theme.signs) {
@@ -1163,6 +1279,12 @@ function buildThemedProp(pr, style) {
     m.position.y = h / 2; m.castShadow = true; m.receiveShadow = true;
     g.add(m);
   }
+  // soft contact-shadow blob grounds every furniture piece
+  const blob = new THREE.Mesh(new THREE.CircleGeometry(r * 1.25, 12),
+    new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.22, depthWrite: false }));
+  blob.rotation.x = -Math.PI / 2;
+  blob.position.y = 0.5;
+  g.add(blob);
   return g;
 }
 
