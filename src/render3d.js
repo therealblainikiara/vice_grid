@@ -21,6 +21,7 @@ import { TILE } from './world.js';
 import { WEAPONS } from './combat.js';
 import { VEHICLE_TYPES } from './vehicles.js';
 import { FURNITURE } from './furniture.js';
+import { expandFurnish } from './furnish.js';
 
 const WALL_H = 78;
 // Every extra point light is a full per-fragment cost on integrated graphics;
@@ -566,6 +567,37 @@ function bakeGround(w) {
       }
     }
   }
+  // furnished rooms can override the floor for their whole footprint, so a
+  // break room reads as checker tile and an executive office as wood.
+  for (const z of expandFurnish(w.mission).zones) {
+    for (let ty = z.ty; ty < z.ty + z.th; ty++) {
+      for (let tx = z.tx; tx < z.tx + z.tw; tx++) {
+        if (at(tx, ty) === '#') continue;
+        const px = tx * TILE, py = ty * TILE;
+        if (z.floor === 'wood') {
+          for (let i = 0; i < 4; i++) {
+            g.fillStyle = (tx * 4 + i) % 2 ? '#6b4c2e' : '#634529';
+            g.fillRect(px, py + i * (TILE / 4), TILE, TILE / 4);
+            g.fillStyle = 'rgba(0,0,0,0.28)';
+            g.fillRect(px, py + i * (TILE / 4), TILE, 1);
+          }
+          q.fillStyle = '#5a5a5a'; q.fillRect(px, py, TILE, TILE);
+        } else if (z.floor === 'checker') {
+          const h = TILE / 2;
+          for (let sy = 0; sy < 2; sy++) for (let sx = 0; sx < 2; sx++) {
+            g.fillStyle = (sx + sy + tx + ty) % 2 ? '#c7c3bb' : '#6e6a64';
+            g.fillRect(px + sx * h, py + sy * h, h, h);
+          }
+          q.fillStyle = '#3a3a3a'; q.fillRect(px, py, TILE, TILE);
+        } else if (z.floor === 'concrete') {
+          g.fillStyle = hash(tx, ty, 3) > 0.5 ? '#44464b' : '#404247';
+          g.fillRect(px, py, TILE, TILE);
+          q.fillStyle = '#8a8a8a'; q.fillRect(px, py, TILE, TILE);
+        }
+      }
+    }
+  }
+
   // indoor levels get warm ceiling-light pools baked onto the floor — the
   // cheapest possible "lit building" read, no runtime lights spent.
   if (!theme.outdoor) {
@@ -826,6 +858,42 @@ function buildStatic(w) {
             addDoor(tx, ty, false, 2); used.add(tx + ',' + (ty + 1));
           }
         }
+      }
+    }
+
+    // ---- furnished rooms (Phase 3): the same expansion the sim used for
+    // collision, so what you see is exactly what you bump into.
+    for (const pl of expandFurnish(w.mission).placements) {
+      const build = FURNITURE[pl.kind];
+      if (!build) continue;
+      const piece = pl.kind === 'plant' ? build(1) : build(pl.opts);
+      piece.position.set(pl.x, 0, pl.y);
+      if (pl.ry) piece.rotation.y = pl.ry;
+      R.statics.add(piece);
+      if (pl.solid) { // contact shadow grounds it
+        const blob = new THREE.Mesh(new THREE.CircleGeometry(pl.r * 1.2, 12),
+          new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.2, depthWrite: false }));
+        blob.rotation.x = -Math.PI / 2;
+        blob.position.set(pl.x, 0.5, pl.y);
+        R.statics.add(blob);
+      }
+    }
+
+    // ---- furnished rooms (Phase 3): the same expansion the sim used for
+    // collision, so what you see is exactly what you bump into.
+    for (const pl of expandFurnish(w.mission).placements) {
+      const build = FURNITURE[pl.kind];
+      if (!build) continue;
+      const piece = pl.kind === 'plant' ? build(1) : build(pl.opts);
+      piece.position.set(pl.x, 0, pl.y);
+      if (pl.ry) piece.rotation.y = pl.ry;
+      R.statics.add(piece);
+      if (pl.solid) { // contact shadow grounds it
+        const blob = new THREE.Mesh(new THREE.CircleGeometry(pl.r * 1.2, 12),
+          new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.2, depthWrite: false }));
+        blob.rotation.x = -Math.PI / 2;
+        blob.position.set(pl.x, 0.5, pl.y);
+        R.statics.add(blob);
       }
     }
 

@@ -15,6 +15,7 @@ import {
 import { AGENTS, ENEMY_TYPES } from './missions.js';
 import { VEHICLE_TYPES, makeVehicle, stepVehicle, ramDamage, damageVehicle, blowTires } from './vehicles.js';
 import { upgradeEffects } from './upgrades.js';
+import { expandFurnish } from './furnish.js';
 
 export const TILE = 48;
 export const ZOOM = 1.45; // camera zoom: world px -> screen px
@@ -90,6 +91,13 @@ export function createWorld(mission, opts) {
   });
 
   w.stats.civiliansTotal += mission.civilianBaseline ?? 0;
+  // Room dressing (Phase 3): furnished rooms become indestructible scenery
+  // props, so kit furniture is real cover for both movement and line of sight.
+  for (const pl of expandFurnish(mission).placements) {
+    if (!pl.solid) continue;
+    w.props.push({ id: id(), kind: 'furniture', x: pl.x, y: pl.y, r: pl.r, solid: true, hp: Infinity, scenery: true });
+  }
+
   // Interdiction: the convoy and its screen charge WEST at the player's line
   // (spawned facing west); everything else travels east as normal.
   const convoyWest = mission.convoyGoal === 'interdict';
@@ -1094,7 +1102,7 @@ function moveVehicle(w, v, dx, dy) {
     if (!blocked) {
       for (const pr of w.props) {
         if (pr.solid && pr.hp > 0 && dist(nx, ny, pr.x, pr.y) < v.r + pr.r - 8) {
-          if (pr.kind !== 'barrier' && Math.abs(v.speed) > 140) { damageProp(w, pr, Math.max(40, pr.hp)); }
+          if (pr.kind !== 'barrier' && !pr.scenery && Math.abs(v.speed) > 140) { damageProp(w, pr, Math.max(40, pr.hp)); }
           else blocked = true;
           break;
         }

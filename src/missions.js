@@ -1279,26 +1279,39 @@ MISSIONS.m14 = {
     phase2Spawns: [{ type: 'cs_shield', x: 10, y: 5 }, { type: 'cs_tactical', x: 22, y: 5 }],
     surrenderAt: 0.1,
   },
+  // A corporate floor, dressed by role (see furnish below): boardroom and
+  // executive suite north, open-plan cubicle farm centre, break room and
+  // lounge east, reception + lift lobby south.
   map: buildMap(34, 20, ({ set, rect, rowFill }) => {
-    rowFill(4, '#');
-    rect(14, 4, 6, 1, '.');
-    for (let y = 5; y <= 14; y += 3) {
-      rowFill(y, '.');
-      for (let x = 4; x <= 29; x += 5) set(x, y, 'c');
-    }
-    set(6, 5, 'E'); set(14, 5, 'E'); set(22, 5, 'E'); set(30, 5, 'E');
-    set(8, 8, 'E'); set(16, 8, 'E'); set(24, 8, 'E');
-    set(10, 11, 'E'); set(18, 11, 'E'); set(26, 11, 'E');
-    set(12, 14, 'E'); set(20, 14, 'E');
-    set(4, 8, 'E'); // +1 extra enemy for validation
-    rowFill(17, '#');
-    rect(14, 17, 6, 1, '.');
-    rowFill(18, '.');
-    set(16, 18, 'X');
-    rowFill(19, ',');
-    set(2, 18, 'P'); set(30, 18, 'm'); // player spawn on row 18 (interior)
-    set(3, 5, 'V'); set(30, 5, 'V'); // evidence
+    // ---- north wing: conference (W) | boardroom approach (C) | executive (E)
+    rowFill(7, '#'); rect(8, 7, 2, 1, '.'); rect(24, 7, 2, 1, '.');   // wing wall + doors
+    rect(12, 1, 1, 6, '#'); rect(21, 1, 1, 6, '#');                   // three rooms
+    rect(12, 4, 1, 1, '.'); rect(21, 4, 1, 1, '.');                   // interconnecting doors
+    set(3, 5, 'V'); set(30, 5, 'V');                                  // evidence
+    // ---- east side rooms: break room over lounge
+    rect(25, 8, 1, 8, '#'); rect(25, 10, 1, 1, '.'); rect(25, 14, 1, 1, '.');
+    rect(26, 12, 7, 1, '#'); rect(29, 12, 1, 1, '.');
+    // ---- south: reception wall, lift bank, entrance
+    rowFill(16, '#'); rect(14, 16, 6, 1, '.');                        // lobby doors
+    rect(1, 17, 1, 2, '#'); rect(3, 17, 1, 2, '#'); rect(5, 17, 1, 2, '#');
+    set(2, 17, '='); set(4, 17, '=');                                 // lift doors
+    set(16, 18, 'X');                                                 // server grid zone
+    set(10, 18, 'P'); set(30, 18, 'm');                               // player + medkit
+    // ---- security detail (12 for the clear objective)
+    set(6, 5, 'E'); set(16, 5, 'E'); set(27, 5, 'E');
+    set(4, 9, 'E'); set(12, 9, 'E'); set(20, 9, 'E');
+    set(8, 11, 'E'); set(16, 11, 'E'); set(23, 11, 'E');
+    set(6, 14, 'E'); set(18, 14, 'E'); set(22, 14, 'E');
   }),
+  furnish: [
+    { rect: [1, 1, 10, 6], role: 'conference' },   // NW boardroom
+    { rect: [22, 1, 10, 6], role: 'executive' },   // NE corner office
+    { rect: [1, 8, 23, 8], role: 'cubicles' },     // open-plan farm
+    { rect: [26, 8, 7, 4], role: 'kitchen' },      // break room
+    { rect: [26, 13, 7, 3], role: 'lounge' },      // staff lounge
+    { rect: [20, 17, 12, 2], role: 'lounge' },     // reception seating
+    { rect: [6, 8, 3, 3], role: 'copier' },        // copier corner
+  ],
 };
 
 MISSIONS.m15 = {
