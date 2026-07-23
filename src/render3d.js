@@ -20,6 +20,7 @@ import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
 import { TILE } from './world.js';
 import { WEAPONS } from './combat.js';
 import { VEHICLE_TYPES } from './vehicles.js';
+import { FURNITURE } from './furniture.js';
 
 const WALL_H = 78;
 // Every extra point light is a full per-fragment cost on integrated graphics;
@@ -322,7 +323,7 @@ function init(canvas) {
   };
   R.mat = makeMaterials();
   scene.add(R.statics);
-  if (typeof window !== 'undefined') window.__vgR = R; // debug/tuning access, like __vg
+  if (typeof window !== 'undefined') { window.__vgR = R; window.__vgFurniture = FURNITURE; } // debug/tuning access, like __vg
   return R;
 }
 
@@ -1235,35 +1236,18 @@ function buildThemedProp(pr, style) {
       cyl(r * 0.88, r * 0.88, 6, '#2a2a2a', 20); cyl(r * 0.9, r * 0.9, 3, '#c4b040', 34);
     }
   } else if (style === 'precinct') {
-    if (shelf) { // duty desk / counter
-      box(r * 2, 30, r * 1.4, '#4a5262', 15, { rough: 0.7, metal: 0.15 });
-      box(r * 2.1, 5, r * 1.6, '#5c6576', 31, { rough: 0.6 }); // worktop
-      box(r * 2, 20, 3, '#3a414e', 26, { z: -r * 0.6 }); // back kick panel
-    } else { // steel filing cabinet
-      box(r * 1.6, 46, r * 1.5, '#5a6068', 23, { metal: 0.4, rough: 0.5 });
-      for (let i = 0; i < 3; i++) box(r * 1.5, 2, 2, '#2c3038', 12 + i * 13, { z: r * 0.76 });
-      for (let i = 0; i < 3; i++) box(6, 2, 3, '#c9ccd2', 12 + i * 13, { z: r * 0.78, metal: 0.6 });
-    }
+    // Phase-2 kit: real duty desks (chair, glowing monitor, papers) and steel
+    // filing cabinets with drawer fronts.
+    if (shelf) g.add(FURNITURE.officeDesk({ off: pr.id % 3 === 0 }));
+    else g.add(FURNITURE.filingCabinet());
   } else if (style === 'office') {
-    if (shelf) { // cubicle divider + monitor
-      box(r * 2, 46, 6, '#6b7280', 23, { rough: 0.85, z: -r * 0.5 });
-      box(6, 46, r * 1.4, '#6b7280', 23, { rough: 0.85, x: -r * 0.8 });
-      box(r * 1.6, 22, r * 1.0, '#8a919e', 11, { rough: 0.6 }); // desk surface block
-      box(20, 13, 3, '#12161c', 30, { z: -r * 0.35, emissive: '#1a3550', ei: 1.2 });
-    } else { // desk with monitor
-      box(r * 2, 22, r * 1.5, '#7a6f5e', 11, { rough: 0.75 });
-      box(r * 2.05, 3, r * 1.55, '#8a7e6a', 22, { rough: 0.7 });
-      box(22, 14, 3, '#0e1218', 32, { emissive: '#1a3550', ei: 1.2 });
-    }
+    // Phase-2 kit: full cubicles (partitions + L-desk + monitor + chair) and
+    // standalone desks; mirrored cubicles break the grid monotony.
+    if (shelf) g.add(FURNITURE.cubicle({ flip: pr.id % 2 === 0, off: pr.id % 4 === 0 }));
+    else g.add(FURNITURE.officeDesk({ off: pr.id % 3 === 1 }));
   } else if (style === 'penthouse') {
-    if (shelf) { // display shelving with warm trim
-      box(r * 1.9, 58, r * 1.4, '#2e2822', 29, { rough: 0.5, metal: 0.2 });
-      for (let i = 0; i < 3; i++) box(r * 1.9, 2, r * 1.4, '#b08a44', 16 + i * 17, { metal: 0.7, rough: 0.3 });
-    } else { // lounge sofa
-      box(r * 2, 14, r * 1.6, '#8a4a52', 9, { rough: 0.9 });
-      box(r * 2, 16, 8, '#7c4048', 18, { rough: 0.9, z: -r * 0.7 });
-      for (const e of [-1, 1]) box(8, 16, r * 1.6, '#7c4048', 16, { x: e * r * 0.9, rough: 0.9 });
-    }
+    if (shelf) g.add(FURNITURE.bookshelf());
+    else g.add(FURNITURE.sofa());
   } else if (style === 'club') {
     if (shelf) { // booth seating
       box(r * 2, 16, r * 1.4, '#3a1f42', 9, { rough: 0.85 });
