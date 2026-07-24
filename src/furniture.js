@@ -8,6 +8,20 @@
 
 import * as THREE from 'three';
 
+// Cached one-off colour materials. Minting a fresh material per book/frame
+// would defeat the static merge pass in render3d (materials are the merge key).
+const COLOR_MATS = new Map();
+function colorMat(hex, o = {}) {
+  const key = hex + '|' + (o.e ?? '') + '|' + (o.ei ?? '');
+  if (!COLOR_MATS.has(key)) {
+    COLOR_MATS.set(key, new THREE.MeshStandardMaterial({
+      color: hex, roughness: o.r ?? 0.9,
+      ...(o.e ? { emissive: o.e, emissiveIntensity: o.ei ?? 0.15 } : {}),
+    }));
+  }
+  return COLOR_MATS.get(key);
+}
+
 let M = null;
 function mats() {
   if (M) return M;
@@ -147,7 +161,7 @@ export function bookshelf() {
     box(g, 21, 8, 8.5, k.plastic, 0, 11 + i * 14, 0.8);
     for (let b = 0; b < 5; b++) {
       const c = ['#8a3a34', '#3a5a7a', '#5a7a3a', '#a08040', '#6a4a7a'][(i * 5 + b) % 5];
-      box(g, 3.4, 7, 7.5, new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 }), -8.5 + b * 4.2, 11.5 + i * 14, 0.9);
+      box(g, 3.4, 7, 7.5, colorMat(c), -8.5 + b * 4.2, 11.5 + i * 14, 0.9);
     }
   }
   return g;
@@ -267,7 +281,7 @@ export function wallArt(v = 0) {
   const k = mats(), g = new THREE.Group();
   box(g, 12, 9, 1, k.woodDark, 0, 0, 0);
   const c = ['#3a5a7a', '#5a7a5a', '#7a5a3a', '#54547a'][v % 4];
-  box(g, 10.2, 7.2, 0.4, new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, emissive: c, emissiveIntensity: 0.15 }), 0, 0, 0.5);
+  box(g, 10.2, 7.2, 0.4, colorMat(c, { r: 0.8, e: c, ei: 0.15 }), 0, 0, 0.5);
   return g;
 }
 export function whiteboard() {

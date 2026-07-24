@@ -1455,6 +1455,13 @@ MISSIONS.m16 = {
     set(3, 5, 'V'); set(30, 5, 'V');
     set(5, 18, 'w'); set(28, 18, 'p');
   }),
+  // the boardroom floor of a wellness empire: lounge seating, a private suite
+  furnish: [
+    { rect: [1, 6, 11, 4], role: 'lounge' },
+    { rect: [22, 6, 11, 4], role: 'executive' },
+    { rect: [1, 11, 11, 4], role: 'lounge' },
+    { rect: [22, 11, 11, 4], role: 'conference' },
+  ],
 };
 
 MISSIONS.op7 = {
