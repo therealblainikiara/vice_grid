@@ -1,5 +1,41 @@
 # VICE GRID — Development State
 
+## RESUME POINT (2026-07-23) — clean, all committed & pushed to origin/main
+
+State: working tree clean, `main` == `origin/main`, 121 tests green, campaign
+validates, single-file build ~0.77MB, CI (pages.yml) deploys the live demo on
+green push. NOTHING is unmerged: the stray branches (`develop/*`,
+`ecc-tools/*`) are STALE pre-squash/automation snapshots that main is far ahead
+of — merging them would DELETE current work; delete them, don't merge.
+
+Completed this session (all on main):
+- Gameplay variety roadmap, 2 of 4 systems shipped:
+  #1 distinct car chases (m03 PURSUIT vs m07 INTERDICTION, directional convoy);
+  #2 wave-defense hold-the-line (m09, `waves[]` + `survive` objective +
+  `trigger:'waves'` boss). Remaining: #3 stealth/detection, #4 timed/hacking.
+- Full 4-phase ART UPLIFT (see docs/ART_UPLIFT_PLAN.md): thin partition walls;
+  architecture shell (painted walls+trim, framed doors, windows, sconces, baked
+  ceiling-light pools, contact shadows); procedural furniture kit
+  (src/furniture.js, 24 builders); semantic room dressing (src/furnish.js,
+  `mission.furnish:[{rect,role}]` -> collision in world.js + visuals in
+  render3d.js); performance (static merge pass `mergeStatics`, SSAO REMOVED —
+  ~19ms for ~invisible gain, DO NOT re-add without measuring). Dressed & merged:
+  m14 (showcase, 54-57fps), m16, m09 (57fps).
+- Earlier: Phase A upgrades all live; Phase C P2-points fix + gamepad UX; Phase
+  D/E recap audit + CI hardened with a #version/sampler3D shader-regression guard.
+
+Open threads (not blockers): furnish rollout to remaining OFFICE-like levels is
+done (m09/m14/m16); non-office indoor levels (warehouse/lab/club/industrial)
+keep their themed map-props by design. Physical-gamepad hardware sign-off and
+NG+ kingpin balance still need the user. Fidelity is user-review-gated —
+awaiting the user's judgement on m14/m16 vs their office reference.
+
+Repo: github.com/therealblainikiara/vice_grid. Plans: UPGRADE_PLAN.md (variety +
+phases A-E), docs/ART_UPLIFT_PLAN.md (4-phase art). Git identity still the
+auto-detected work address (user to set).
+
+---
+
 Updated: 2026-07-17 (session 11, checkpoint 3) — PER-MISSION ENVIRONMENTS + FULL CAMPAIGN + ALL OPS COMPLETE
 
 ## Session-11 checkpoint 3: Per-mission environments (browser-verified)
