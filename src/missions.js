@@ -706,8 +706,8 @@ MISSIONS.m09 = {
     rect(30, 12, 1, 1, '#'); rect(30, 15, 1, 1, '#');                // office back partitions
     set(30, 10, 'c'); set(30, 13, 'c'); set(30, 16, 'c');            // office desks
     set(29, 10, 's'); set(29, 13, 's');                              // office shelving
-    // ---- BULLPEN (y9-16): orderly cubicle rows (divider + desk) with clear aisles
-    for (const gy of [9, 13]) for (const gx of [3, 8, 13, 18, 23]) { set(gx, gy, 's'); set(gx + 1, gy, 'c'); }
+    // ---- BULLPEN (y9-16): cubicle farm placed via the furnish system below,
+    // so it merges into the static batch (perf) instead of unmerged map props
     set(6, 11, 'C'); set(16, 11, 'C'); set(11, 15, 'C');             // clerks sheltering
     set(5, 3, 'E'); set(28, 3, 'E'); set(12, 10, 'E'); set(20, 14, 'E'); // a few raiders already inside
     // ---- RECEPTION LOBBY (y18-20): counter, lift bank, and the breached entrance
@@ -718,6 +718,9 @@ MISSIONS.m09 = {
     rowFill(20, ',');                                                // entrance mat / street
     set(10, 19, 'P'); set(29, 19, 'w');                             // player start + weapon locker
   }),
+  furnish: [
+    { rect: [2, 9, 24, 8], role: 'cubicles' },   // bullpen (merged static batch)
+  ],
 };
 
 MISSIONS.m10 = {
