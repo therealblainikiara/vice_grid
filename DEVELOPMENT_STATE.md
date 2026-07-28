@@ -14,22 +14,33 @@ LAYOUT archetypes (real entrances, open edges, semantic zones) + a hazard system
 off-map, so open edges are safe.
 
 DONE (committed):
-- `src/layout.js` + `tests/layout.test.js` (7 tests). `buildLayout(spec)` ->
-  {map, zones, spawn, edges} for archetypes office/dock/plain; `resolveZone()`
-  deterministically places content in a named zone (does NOT mutate busy —
-  caller marks). Office = reception -> spine -> open-plan -> exec; dock opens the
-  seaward (north) edge to water.
+- `src/layout.js` + `tests/layout.test.js` (12 tests, 133 total green).
+  `buildLayout(spec)` -> {map, zones, spawn, edges} for archetypes
+  office/dock/plain; `resolveZone()` deterministically places content in a named
+  zone (does NOT mutate busy — caller marks). Office = reception -> spine ->
+  open-plan -> exec; dock opens the seaward (north) edge to water.
+- `materializeLayout(mission)` — the SIM INTEGRATION. A mission declares
+  `layout:{archetype,size,entrance,seed}` + zoned content (`enemies:[{zone,count}]`,
+  `boss:{zone}`, `escalation.spawns:[{...,zone}]`, `phase2Spawns:[{...,zone}]`,
+  `evidenceZoned`/`civiliansZoned`/`pickupsZoned`) and this stamps a CONCRETE map
+  (P/E/V/C markers) + resolves boss/escalation/phase2 to tile coords, in the exact
+  shape createWorld + validate + renderers already consume. Raw-map missions pass
+  through untouched. Deterministic (seeded off mission id). NOTE: nothing calls it
+  yet — mission defs must wrap themselves: `MISSIONS.mXX = materializeLayout({...})`.
 
 NEXT STEPS (in order — each stays green + commit before the next):
-1. Integrate into the sim. In `missions.js`/`world.js`, let a mission declare
-   `layout:{archetype,size,entrance,seed}` INSTEAD of a hand-drawn `map`. In
-   `buildWorld` (map parse ~world.js:70-98), when `mission.layout` is present:
-   build via `buildLayout`, use its `spawn` for `P`, and resolve zone-authored
-   content — support `boss:{zone}`, `escalation.spawns:[{...,zone}]`,
-   `enemies:[{pool,zone,count}]`, evidence/pickups by zone — via `resolveZone`
-   against a shared busy Set (seed off mission id). Keep raw x,y back-compat.
-   Add tests: a layout mission builds, spawn is at the entrance, zone content
-   lands walkable & in-zone.
+1. Convert the FIRST live mission (m14 Halcyon HQ office) end-to-end. Author it
+   as `materializeLayout({ id, layout:{archetype:'office',size:[34,20],
+   entrance:'reception-s',seed:14}, enemies:[{zone,count}...] summing to the clear
+   count (12), boss:{...,zone:'exec'}, escalation zoned, evidenceZoned count 2,
+   ... })`. GAPS to close first: (a) office archetype has no reach-GATE zone —
+   add a `server`/gate zone + a `gatesZoned:[{zone,tag}]` -> 'X' path in
+   materializeLayout (validate.js requires an X for reach objectives); (b) decide
+   furnish — either derive furnish rects from L.zones or drop dressing for v1.
+   Then `node --test` + `node tools/validate.js` green, and BROWSER-VERIFY
+   (mandatory for mission changes): `__vg.skipToPlay('rhino','m14'); __vg.tick(1)`
+   + screenshot — confirm you enter through reception and flow reads right. DO NOT
+   push a mission conversion until browser-verified.
 2. Edge-aware validator. Replace sealed-border check `validate.js:41-48` with
    per-side edge-type validation (wall sealed; water/void/fence/plaza open where
    declared). Validate every `zone` ref resolves to >= required free tiles.
