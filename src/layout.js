@@ -137,3 +137,58 @@ export function resolveZone(layout, name, busy, seed = 1) {
   const rng = makeRng(((seed * 2654435761) + cells.length) >>> 0);
   return cells[Math.floor(rng() * cells.length)];
 }
+
+function hashSeed(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+// Turn a layout-authored mission into the CONCRETE shape the rest of the engine
+// already consumes: a stamped `map` (walls + P/E/V markers), tile-coord `boss`
+// and `escalation`/`phase2` spawns resolved from their zones, plus `zones`/`edges`
+// exposed for the renderers. A mission with no `layout` is returned untouched, so
+// street/convoy missions keep their hand-authored maps. Deterministic (seeded off
+// mission id + layout seed), so it is safe to run once at definition time.
+export function materializeLayout(mission) {
+  if (!mission.layout) return mission;
+  const L = buildLayout(mission.layout);
+  const grid = L.map.map((r) => [...r]);
+  const busy = new Set();
+  // seed all wall tiles as busy so nothing resolves onto geometry
+  for (let ty = 0; ty < grid.length; ty++) for (let tx = 0; tx < grid[ty].length; tx++) if (grid[ty][tx] === '#') busy.add(tx + ',' + ty);
+  const base = (hashSeed(mission.id ?? 'm') ^ (mission.layout.seed ?? 0)) >>> 0;
+  let n = 0;
+
+  const place = (zone, ch) => {
+    const t = resolveZone(L, zone, busy, base + (++n) * 101);
+    if (!t) return null;
+    busy.add(t.tx + ',' + t.ty);
+    if (ch) grid[t.ty][t.tx] = ch;
+    return t;
+  };
+  const coords = (t) => (t ? { x: t.tx, y: t.ty } : {});
+
+  // player spawn
+  const sx = Math.floor(L.spawn.x / T), sy = Math.floor(L.spawn.y / T);
+  grid[sy][sx] = 'P'; busy.add(sx + ',' + sy);
+
+  // zone-authored content -> map markers
+  for (const grp of mission.enemies ?? []) for (let i = 0; i < (grp.count ?? 1); i++) place(grp.zone, 'E');
+  for (const grp of mission.evidenceZoned ?? []) for (let i = 0; i < (grp.count ?? 1); i++) place(grp.zone, 'V');
+  for (const grp of mission.civiliansZoned ?? []) for (let i = 0; i < (grp.count ?? 1); i++) place(grp.zone, 'C');
+  for (const p of mission.pickupsZoned ?? []) place(p.zone, p.ch ?? 'm');
+
+  // boss + escalation + phase2 -> tile coords resolved from their zones
+  let boss = mission.boss;
+  if (boss?.zone) boss = { ...boss, ...coords(place(boss.zone, null)) };
+  if (boss?.phase2Spawns?.some((s) => s.zone)) {
+    boss = { ...boss, phase2Spawns: boss.phase2Spawns.map((s) => (s.zone ? { ...s, ...coords(place(s.zone, null)) } : s)) };
+  }
+  let escalation = mission.escalation;
+  if (escalation?.spawns?.some((s) => s.zone)) {
+    escalation = { ...escalation, spawns: escalation.spawns.map((s) => (s.zone ? { ...s, ...coords(place(s.zone, null)) } : s)) };
+  }
+
+  return { ...mission, map: grid.map((r) => r.join('')), zones: L.zones, edges: L.edges, spawn: L.spawn, boss, escalation };
+}

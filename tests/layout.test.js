@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildLayout, resolveZone } from '../src/layout.js';
+import { buildLayout, resolveZone, materializeLayout } from '../src/layout.js';
 
 const T = 48;
 const dims = (map) => ({ rows: map.length, cols: map[0].length });
@@ -90,4 +90,63 @@ test('resolveZone never returns an already-busy tile', () => {
     picks.push(key);
   }
   assert.equal(new Set(picks).size, picks.length, 'duplicate placements');
+});
+
+// --- materializeLayout (sim integration) ------------------------------------
+
+test('materializeLayout leaves a raw-map mission untouched (back-compat)', () => {
+  const raw = { id: 'x', map: ['###', '#.#', '###'], boss: { type: 'a', x: 1, y: 1 } };
+  assert.equal(materializeLayout(raw), raw);
+});
+
+test('materializeLayout stamps a concrete map with one spawn and the requested enemies', () => {
+  const m = materializeLayout({
+    id: 'm-office', enemyPool: ['soldier'],
+    layout: { archetype: 'office', size: [34, 22], entrance: 'reception-s', seed: 14 },
+    enemies: [{ zone: 'openPlan', count: 5 }, { zone: 'reception', count: 2 }],
+  });
+  assert.equal(m.map.length, 22);
+  assert.equal(m.map[0].length, 34);
+  assert.equal(m.map.join('').split('P').length - 1, 1, 'expected exactly one spawn');
+  assert.equal(m.map.join('').split('E').length - 1, 7, 'expected 7 enemy markers');
+  assert.ok(m.zones && m.edges, 'zones/edges not exposed for renderers');
+});
+
+test('materializeLayout resolves a zoned boss to walkable coords inside its zone', () => {
+  const m = materializeLayout({
+    id: 'm-office', enemyPool: ['soldier'],
+    layout: { archetype: 'office', size: [34, 22], entrance: 'reception-s', seed: 14 },
+    boss: { type: 'architect', zone: 'exec' },
+  });
+  assert.equal(typeof m.boss.x, 'number');
+  assert.equal(typeof m.boss.y, 'number');
+  assert.notEqual(m.map[m.boss.y][m.boss.x], '#', 'boss stamped into a wall');
+  assert.ok(
+    m.zones.exec.some((r) => m.boss.x >= r.tx && m.boss.x < r.tx + r.tw && m.boss.y >= r.ty && m.boss.y < r.ty + r.th),
+    'boss resolved outside the exec zone',
+  );
+});
+
+test('materializeLayout resolves zoned escalation spawns to walkable coords', () => {
+  const m = materializeLayout({
+    id: 'm-office', enemyPool: ['soldier'],
+    layout: { archetype: 'office', size: [34, 22], entrance: 'reception-s', seed: 14 },
+    escalation: { at: 5, spawns: [{ type: 'bruiser', zone: 'reception' }, { type: 'dealer', zone: 'openPlan' }] },
+  });
+  for (const s of m.escalation.spawns) {
+    assert.equal(typeof s.x, 'number');
+    assert.notEqual(m.map[s.y][s.x], '#', 'escalation spawn in a wall');
+  }
+});
+
+test('materializeLayout is deterministic for the same mission', () => {
+  const spec = () => ({
+    id: 'm-office', enemyPool: ['soldier'],
+    layout: { archetype: 'office', size: [34, 22], entrance: 'reception-s', seed: 14 },
+    boss: { type: 'architect', zone: 'exec' },
+    enemies: [{ zone: 'openPlan', count: 4 }],
+  });
+  const a = materializeLayout(spec()), b = materializeLayout(spec());
+  assert.deepEqual(a.map, b.map);
+  assert.deepEqual(a.boss, b.boss);
 });
