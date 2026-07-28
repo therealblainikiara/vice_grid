@@ -3,6 +3,8 @@
 // s shelf (destructible), P player spawn, E enemy, H heavy enemy, B boss,
 // C civilian, V evidence, w weapon pickup, m medkit, ~ road, D door (open).
 
+import { materializeLayout } from './layout.js';
+
 export const AGENTS = {
   rhino: {
     key: 'rhino', name: 'RHINO', fullName: 'Marta "Rhino" Okafor',
@@ -1239,10 +1241,24 @@ MISSIONS.m13 = {
   }),
 };
 
-MISSIONS.m14 = {
+MISSIONS.m14 = materializeLayout({
   id: 'm14',
   title: 'M14 — HALCYON HQ',
   parSec: 600,
+  // Layout archetype: you breach through the south reception/lift lobby, push up
+  // the open-plan floor, and corner THE ARCHITECT in the executive suite — a real
+  // approach instead of a sealed box you start in the corner of.
+  layout: { archetype: 'office', size: [34, 20], entrance: 'reception-s', seed: 14 },
+  // 12 security for the clear objective, spread across the flow (reception ->
+  // open-plan -> exec). 2 evidence, medkit at reception, server-grid gate mid-floor.
+  enemies: [
+    { zone: 'reception', count: 2 },
+    { zone: 'openPlan', count: 7 },
+    { zone: 'exec', count: 3 },
+  ],
+  evidenceZoned: [{ zone: 'exec', count: 1 }, { zone: 'openPlan', count: 1 }],
+  pickupsZoned: [{ zone: 'reception', ch: 'm' }],
+  gatesZoned: [{ zone: 'openPlan' }],
   briefing: {
     speaker: 'DISPATCH',
     lines: [
@@ -1263,7 +1279,7 @@ MISSIONS.m14 = {
   objectives: [
     { id: 'clear', label: 'Neutralize Halcyon security', primary: true, type: 'neutralize', count: 12, tag: 'gunman' },
     { id: 'boss', label: 'Take down THE ARCHITECT', primary: true, type: 'boss' },
-    { id: 'server', label: 'Reach the penthouse server grid', primary: true, type: 'reach', tag: 'server' },
+    { id: 'server', label: 'Reach the penthouse server grid', primary: true, type: 'reach' },
     { id: 'cuffs', label: 'Optional: Arrest 6 executives', primary: false, type: 'arrest', count: 6 },
     { id: 'ledger', label: 'Optional: Seize the master ledger + encryption keys', primary: false, type: 'evidence', count: 2 },
   ],
@@ -1271,51 +1287,18 @@ MISSIONS.m14 = {
     at: 6,
     banner: 'PENTHOUSE BLAST DOORS SEAL — INTERNAL DEFENSES ONLINE',
     spawns: [
-      { type: 'cs_tactical', x: 2, y: 2 }, { type: 'cs_shield', x: 3, y: 2 },
-      { type: 'cs_tactical', x: 30, y: 2 }, { type: 'cs_shield', x: 31, y: 2 },
+      { type: 'cs_tactical', zone: 'reception' }, { type: 'cs_shield', zone: 'reception' },
+      { type: 'cs_tactical', zone: 'openPlan' }, { type: 'cs_shield', zone: 'openPlan' },
     ],
   },
   boss: {
-    type: 'graft', x: 16, y: 2, name: 'THE ARCHITECT',
+    type: 'graft', zone: 'exec', name: 'THE ARCHITECT',
     intro: 'THE ARCHITECT: "You\'re not police. You\'re a symptom. I\'ll prescribe the cure."',
     phase2At: 0.5, phase2Banner: 'THE ARCHITECT ACTIVATES THE BUILDING AI',
-    phase2Spawns: [{ type: 'cs_shield', x: 10, y: 5 }, { type: 'cs_tactical', x: 22, y: 5 }],
+    phase2Spawns: [{ type: 'cs_shield', zone: 'exec' }, { type: 'cs_tactical', zone: 'openPlan' }],
     surrenderAt: 0.1,
   },
-  // A corporate floor, dressed by role (see furnish below): boardroom and
-  // executive suite north, open-plan cubicle farm centre, break room and
-  // lounge east, reception + lift lobby south.
-  map: buildMap(34, 20, ({ set, rect, rowFill }) => {
-    // ---- north wing: conference (W) | boardroom approach (C) | executive (E)
-    rowFill(7, '#'); rect(8, 7, 2, 1, '.'); rect(24, 7, 2, 1, '.');   // wing wall + doors
-    rect(12, 1, 1, 6, '#'); rect(21, 1, 1, 6, '#');                   // three rooms
-    rect(12, 4, 1, 1, '.'); rect(21, 4, 1, 1, '.');                   // interconnecting doors
-    set(3, 5, 'V'); set(30, 5, 'V');                                  // evidence
-    // ---- east side rooms: break room over lounge
-    rect(25, 8, 1, 8, '#'); rect(25, 10, 1, 1, '.'); rect(25, 14, 1, 1, '.');
-    rect(26, 12, 7, 1, '#'); rect(29, 12, 1, 1, '.');
-    // ---- south: reception wall, lift bank, entrance
-    rowFill(16, '#'); rect(14, 16, 6, 1, '.');                        // lobby doors
-    rect(1, 17, 1, 2, '#'); rect(3, 17, 1, 2, '#'); rect(5, 17, 1, 2, '#');
-    set(2, 17, '='); set(4, 17, '=');                                 // lift doors
-    set(16, 18, 'X');                                                 // server grid zone
-    set(10, 18, 'P'); set(30, 18, 'm');                               // player + medkit
-    // ---- security detail (12 for the clear objective)
-    set(6, 5, 'E'); set(16, 5, 'E'); set(27, 5, 'E');
-    set(4, 9, 'E'); set(12, 9, 'E'); set(20, 9, 'E');
-    set(8, 11, 'E'); set(16, 11, 'E'); set(23, 11, 'E');
-    set(6, 14, 'E'); set(18, 14, 'E'); set(22, 14, 'E');
-  }),
-  furnish: [
-    { rect: [1, 1, 10, 6], role: 'conference' },   // NW boardroom
-    { rect: [22, 1, 10, 6], role: 'executive' },   // NE corner office
-    { rect: [1, 8, 23, 8], role: 'cubicles' },     // open-plan farm
-    { rect: [26, 8, 7, 4], role: 'kitchen' },      // break room
-    { rect: [26, 13, 7, 3], role: 'lounge' },      // staff lounge
-    { rect: [20, 17, 12, 2], role: 'lounge' },     // reception seating
-    { rect: [6, 8, 3, 3], role: 'copier' },        // copier corner
-  ],
-};
+});
 
 MISSIONS.m15 = {
   id: 'm15',

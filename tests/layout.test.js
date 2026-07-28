@@ -17,20 +17,18 @@ test('office archetype builds a map of the requested size', () => {
   assert.equal(rows, 22);
 });
 
-test('office archetype walls all four edges except the entrance gap', () => {
+test('office archetype is a fully sealed shell (all four edges walled)', () => {
   const L = buildLayout({ archetype: 'office', size: [34, 22], entrance: 'reception-s' });
   assert.deepEqual(L.edges, { n: 'wall', e: 'wall', s: 'wall', w: 'wall' });
-  // north/east/west fully sealed
   const { rows, cols } = dims(L.map);
-  for (let x = 0; x < cols; x++) assert.equal(at(L.map, x, 0), '#', `north open at ${x}`);
+  for (let x = 0; x < cols; x++) {
+    assert.equal(at(L.map, x, 0), '#', `north open at ${x}`);
+    assert.equal(at(L.map, x, rows - 1), '#', `south open at ${x}`);
+  }
   for (let y = 0; y < rows; y++) {
     assert.equal(at(L.map, 0, y), '#', `west open at ${y}`);
     assert.equal(at(L.map, cols - 1, y), '#', `east open at ${y}`);
   }
-  // south wall has at least one gap (the entrance)
-  let gap = 0;
-  for (let x = 0; x < cols; x++) if (at(L.map, x, rows - 1) !== '#') gap++;
-  assert.ok(gap >= 1, 'south entrance has no gap');
 });
 
 test('office archetype exposes reception, openPlan and exec zones, in-bounds and walkable', () => {
@@ -149,4 +147,31 @@ test('materializeLayout is deterministic for the same mission', () => {
   const a = materializeLayout(spec()), b = materializeLayout(spec());
   assert.deepEqual(a.map, b.map);
   assert.deepEqual(a.boss, b.boss);
+});
+
+test('materializeLayout stamps a reach gate (X) from gatesZoned', () => {
+  const m = materializeLayout({
+    id: 'm-office', enemyPool: ['soldier'],
+    layout: { archetype: 'office', size: [34, 22], entrance: 'reception-s', seed: 14 },
+    gatesZoned: [{ zone: 'exec' }],
+  });
+  assert.equal(m.map.join('').split('X').length - 1, 1, 'expected exactly one gate');
+});
+
+test('materializeLayout auto-dresses office zones when no furnish supplied', () => {
+  const m = materializeLayout({
+    id: 'm-office', enemyPool: ['soldier'],
+    layout: { archetype: 'office', size: [34, 22], entrance: 'reception-s', seed: 14 },
+  });
+  assert.ok(Array.isArray(m.furnish) && m.furnish.length >= 1, 'no furnish derived');
+  assert.ok(m.furnish.map((f) => f.role).includes('cubicles'), 'open-plan not dressed as cubicles');
+});
+
+test('materializeLayout keeps an explicitly supplied furnish', () => {
+  const given = [{ rect: [2, 2, 4, 4], role: 'storage' }];
+  const m = materializeLayout({
+    id: 'm-office', enemyPool: ['soldier'], furnish: given,
+    layout: { archetype: 'office', size: [34, 22], entrance: 'reception-s', seed: 14 },
+  });
+  assert.deepEqual(m.furnish, given);
 });

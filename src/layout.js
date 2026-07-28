@@ -52,9 +52,10 @@ export function buildLayout(spec) {
 function officeArch({ cols, rows, rect, hwall, vwall, door }) {
   const edges = { n: EDGE.WALL, e: EDGE.WALL, s: EDGE.WALL, w: EDGE.WALL };
 
-  // south entrance: a threshold gap in the bottom wall
+  // The office is a sealed shell (you don't enter from off-map): the "entrance"
+  // is the reception zone you spawn in, and flow comes from the interior doorway
+  // up into the floor. doorX marks that reception->floor threshold.
   const doorW = 3, doorX = Math.floor(cols / 2) - 1;
-  rect(doorX, rows - 1, doorW, 1, ',');
 
   // reception band along the south, sealed off with a partition + doorway
   const recTh = 4, recTy = rows - 1 - recTh;
@@ -178,6 +179,7 @@ export function materializeLayout(mission) {
   for (const grp of mission.evidenceZoned ?? []) for (let i = 0; i < (grp.count ?? 1); i++) place(grp.zone, 'V');
   for (const grp of mission.civiliansZoned ?? []) for (let i = 0; i < (grp.count ?? 1); i++) place(grp.zone, 'C');
   for (const p of mission.pickupsZoned ?? []) place(p.zone, p.ch ?? 'm');
+  for (const g of mission.gatesZoned ?? []) place(g.zone, 'X');
 
   // boss + escalation + phase2 -> tile coords resolved from their zones
   let boss = mission.boss;
@@ -190,5 +192,24 @@ export function materializeLayout(mission) {
     escalation = { ...escalation, spawns: escalation.spawns.map((s) => (s.zone ? { ...s, ...coords(place(s.zone, null)) } : s)) };
   }
 
-  return { ...mission, map: grid.map((r) => r.join('')), zones: L.zones, edges: L.edges, spawn: L.spawn, boss, escalation };
+  // Auto-dress recognised zones so a converted office isn't a bare shell. Only
+  // when the mission doesn't hand-author its own furnish. Rects come straight
+  // from the archetype zones, so dressing always aligns with the new floorplan.
+  const furnish = mission.furnish ?? deriveFurnish(L.zones);
+
+  return { ...mission, map: grid.map((r) => r.join('')), zones: L.zones, edges: L.edges, spawn: L.spawn, boss, escalation, furnish };
+}
+
+// Map archetype zone names to furnish.js room roles. Zones with no sensible
+// dressing (corridors, open yards) are skipped.
+const ZONE_ROLE = { reception: 'lounge', openPlan: 'cubicles', exec: 'executive', office: 'office' };
+
+function deriveFurnish(zones) {
+  const out = [];
+  for (const [name, rects] of Object.entries(zones ?? {})) {
+    const role = ZONE_ROLE[name];
+    if (!role) continue;
+    for (const r of rects) out.push({ rect: [r.tx, r.ty, r.tw, r.th], role });
+  }
+  return out;
 }

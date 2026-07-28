@@ -53,6 +53,10 @@ let world = null;
 let coopArmed = false;
 let pauseLatch = false;
 let replayMode = false;
+// TESTING: open every implemented mission in Mission Select regardless of
+// campaign progress, so any level (e.g. m14) can be reached directly. Flip to
+// false at release to restore beat-to-unlock gating.
+const UNLOCK_ALL = true;
 const GRADE_RANK = { S: 5, A: 4, B: 3, C: 2, D: 1 };
 
 const fx = {
@@ -273,7 +277,7 @@ on('btn-missions', () => {
       id: m.id,
       title: `M${String(i + 1).padStart(2, '0')} — ${m.title}`,
       grade: campaign.grades[m.id],
-      locked: !m.implemented || i > campaign.missionIndex,
+      locked: !m.implemented || (!UNLOCK_ALL && i > campaign.missionIndex),
     })),
     (id) => { replayMode = true; startMission(id); },
   );
