@@ -8,6 +8,7 @@ import { draw } from './render.js';
 import { draw3d, resize3d } from './render3d.js';
 import { gradeMission } from './grading.js';
 import { recordMissionOutcome, selectEnding } from './story.js';
+import { resolveCinematic } from './cutscene.js';
 import { MISSIONS, CAMPAIGN, AGENTS } from './missions.js';
 import { makeSaveStore, newCampaign, loadSettings, saveSettings } from './save.js';
 import { buyUpgrade, refundUpgrade, respec } from './upgrades.js';
@@ -151,6 +152,17 @@ function currentMissionId() {
 
 function startMission(missionId) {
   const mission = MISSIONS[missionId];
+  // Between-level cinematic (if the mission declares one), then recap/briefing.
+  const clip = resolveCinematic(mission, { cinematics: settings.cinematics });
+  if (clip) {
+    state = 'cinematic';
+    ui.playCinematic(clip, () => runBriefing(mission));
+  } else {
+    runBriefing(mission);
+  }
+}
+
+function runBriefing(mission) {
   // Show story recap first, then briefing
   state = 'recap';
   ui.clearLog();

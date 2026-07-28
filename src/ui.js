@@ -371,8 +371,57 @@ export function makeUI(settings, audio) {
   }
 
   // Ending screen
+  // Between-level cinematic runner. Plays a video clip or a styled title card
+  // over everything, then calls onDone -> the mission flow continues "from that
+  // point". Skippable (click / Esc / Space / Enter); a missing or broken video
+  // falls through immediately so the flow never stalls on a bad asset.
+  function playCinematic(clip, onDone) {
+    const prev = document.getElementById('cinematic');
+    if (prev) prev.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'cinematic';
+    overlay.tabIndex = 0;
+    overlay.style.cssText = 'position:fixed;inset:0;background:#000;z-index:9999;display:flex;align-items:center;justify-content:center;overflow:hidden';
+    let timer = null, fired = false;
+    const finish = () => {
+      if (fired) return; fired = true;
+      if (timer) clearTimeout(timer);
+      overlay.remove();
+      onDone?.();
+    };
+
+    if (clip.kind === 'video' && clip.src) {
+      const video = document.createElement('video');
+      video.src = clip.src; video.autoplay = true; video.playsInline = true;
+      video.style.cssText = 'max-width:100%;max-height:100%';
+      video.addEventListener('ended', finish);
+      video.addEventListener('error', finish); // bad/missing asset -> skip
+      overlay.appendChild(video);
+      Promise.resolve(video.play?.()).catch(finish);
+    } else {
+      const card = document.createElement('div');
+      card.style.cssText = 'text-align:center;color:#e8f0ff;font-family:system-ui,Segoe UI,sans-serif;padding:2rem;max-width:60ch;text-shadow:0 2px 12px #000;animation:cineFade .8s ease';
+      card.innerHTML = `<div style="letter-spacing:.35em;font-size:.8rem;color:#7ec8ff;margin-bottom:1rem">VICE GRID</div>`
+        + `<h1 style="font-size:2.6rem;margin:0 0 1.2rem;font-weight:800">${escapeHtml(clip.title)}</h1>`
+        + clip.lines.map((l) => `<p style="font-size:1.05rem;line-height:1.5;opacity:.9;margin:.4rem 0">${escapeHtml(l)}</p>`).join('');
+      overlay.appendChild(card);
+      timer = setTimeout(finish, (clip.seconds || 5) * 1000);
+    }
+
+    if (clip.skippable) {
+      const skip = document.createElement('button');
+      skip.textContent = 'Skip ▸';
+      skip.style.cssText = 'position:absolute;bottom:1.3rem;right:1.3rem;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:6px;padding:.5rem 1rem;font-size:.95rem;cursor:pointer';
+      skip.addEventListener('click', finish);
+      overlay.addEventListener('keydown', (e) => { if (['Escape', ' ', 'Enter'].includes(e.key)) finish(); });
+    }
+
+    document.body.appendChild(overlay);
+    overlay.focus();
+  }
+
   return { show, banner, subtitle, log, clearLog, updateHud, showBriefing, showResults, showEnding, showRecap,
-    buildSettingsPanel, buildControlsPanel, showUpgrade, showMissionSelect, liveScore };
+    buildSettingsPanel, buildControlsPanel, showUpgrade, showMissionSelect, liveScore, playCinematic };
 }
 
 function escapeHtml(s) {

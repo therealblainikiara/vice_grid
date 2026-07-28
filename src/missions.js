@@ -1249,6 +1249,16 @@ MISSIONS.m14 = materializeLayout({
   // the open-plan floor, and corner THE ARCHITECT in the executive suite — a real
   // approach instead of a sealed box you start in the corner of.
   layout: { archetype: 'office', size: [34, 20], entrance: 'reception-s', seed: 14 },
+  // Between-level cinematic. Title card for now; drop assets/cine/m14.mp4 and add
+  // `src: 'assets/cine/m14.mp4'` here to play a real clip instead.
+  cinematic: {
+    title: 'HALCYON HQ',
+    lines: [
+      'The Rig\'s manifest led downtown — to a glass tower and a boardroom where the city is auctioned.',
+      'Every name is in that room tonight.',
+      'Go in through reception. Take them all.',
+    ],
+  },
   // 12 security for the clear objective, spread across the flow (reception ->
   // open-plan -> exec). 2 evidence, medkit at reception, server-grid gate mid-floor.
   enemies: [
