@@ -1,5 +1,66 @@
 # VICE GRID — Development State
 
+## IN PROGRESS (2026-07-28) — Environmental Flow & Hazards (A+B)
+
+Spec: `docs/superpowers/specs/2026-07-28-environmental-flow-and-hazards-design.md`
+(read it — all decisions locked there). Git identity now set local to this repo
+(therealblainikiara / blainikiara@gmail.com). 128 tests green, validator green,
+working tree clean, all committed (NOT yet pushed).
+
+Why: every indoor level feels the same — `buildMap` seals all four edges, spawns
+are all bottom-left, and `environment` only skins visuals. Fix = per-environment
+LAYOUT archetypes (real entrances, open edges, semantic zones) + a hazard system
+(barrels, breakable glass, fall-out zones). `solidAt():198` already blocks
+off-map, so open edges are safe.
+
+DONE (committed):
+- `src/layout.js` + `tests/layout.test.js` (7 tests). `buildLayout(spec)` ->
+  {map, zones, spawn, edges} for archetypes office/dock/plain; `resolveZone()`
+  deterministically places content in a named zone (does NOT mutate busy —
+  caller marks). Office = reception -> spine -> open-plan -> exec; dock opens the
+  seaward (north) edge to water.
+
+NEXT STEPS (in order — each stays green + commit before the next):
+1. Integrate into the sim. In `missions.js`/`world.js`, let a mission declare
+   `layout:{archetype,size,entrance,seed}` INSTEAD of a hand-drawn `map`. In
+   `buildWorld` (map parse ~world.js:70-98), when `mission.layout` is present:
+   build via `buildLayout`, use its `spawn` for `P`, and resolve zone-authored
+   content — support `boss:{zone}`, `escalation.spawns:[{...,zone}]`,
+   `enemies:[{pool,zone,count}]`, evidence/pickups by zone — via `resolveZone`
+   against a shared busy Set (seed off mission id). Keep raw x,y back-compat.
+   Add tests: a layout mission builds, spawn is at the entrance, zone content
+   lands walkable & in-zone.
+2. Edge-aware validator. Replace sealed-border check `validate.js:41-48` with
+   per-side edge-type validation (wall sealed; water/void/fence/plaza open where
+   declared). Validate every `zone` ref resolves to >= required free tiles.
+3. Convert ONE office (m14) to the office archetype end-to-end. `node --test` +
+   `node tools/validate.js` green, then browser-verify via
+   `__vg.skipToPlay('rhino', 'm14'); __vg.tick(1)` + screenshot.
+4. Hazards (world.js prop model ~world.js:74-88 + vat mechanic ~1034+):
+   `b`=explosive barrel (reuse vat fuse/chain), `g`=breakable glass (low-hp
+   solid -> passable when shot, opens sightline). Fall-out band on interior tiles
+   adjacent to water/void edges: knocked-in entity dies = KILL for grade;
+   cuffed/surrendered SHIELDED (mirror world.js:1073). Player vulnerable. Tests:
+   barrel chain, glass opens passage, fall-out kills live enemy / spares cuffed /
+   counts against grade.
+5. Renderer PARITY (the sessions-8 lesson — do BOTH): `render3d.js` glass panes +
+   shatter, water/void edges, barrels, crane, steam; `render.js` 2D via `ENV_2D`.
+   Nothing ships 3D-only.
+6. Roll out remaining indoor archetypes: warehouse m04, port m05, precinct m09,
+   lab m08, industrial m11-m13, penthouse m16, ops. Street/club/convoy: edge
+   types only where useful.
+
+Deferred to a separate spec (C): between-level cinematics / video system.
+
+Resume commands:
+```
+cd C:\Users\PaulRyan\Documents\BNSGames\vice-grid
+node --test && node tools/validate.js     # must be 128 green + valid
+python tools/serve.py 8930                # no-cache dev server
+```
+
+---
+
 ## RESUME POINT (2026-07-23) — clean, all committed & pushed to origin/main
 
 State: working tree clean, `main` == `origin/main`, 121 tests green, campaign
